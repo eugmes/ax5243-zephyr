@@ -1,0 +1,17 @@
+#
+# Copyright (c) 2020 Ievgenii Meshcheriakov
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+description: >
+    This is a representation of the ON Semiconuctor AX5043 and AX5243 radio
+    receivers.
+
+compatible: "onnn,ax5x43"
+
+include: [spi-device.yaml]
+
+properties:
+    irq-gpios:
+      type: phandle-array

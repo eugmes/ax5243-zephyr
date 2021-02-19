@@ -1,0 +1,2 @@
+config SHIELD_AX5243_NANO
+	def_bool $(shields_list_contains,ax5234_nano)
