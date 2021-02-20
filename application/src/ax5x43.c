@@ -55,70 +55,32 @@ void ax5x43_set_callback(const struct device *dev, ax5x43_callback callback)
 	drv_data->callback = callback;
 }
 
-static int read_short(const struct device *dev, uint16_t addr, size_t count,
-                      uint8_t *data)
+static int read_regs(const struct device *dev, bool force_long, uint16_t addr,
+                     size_t count, uint8_t *data)
 {
 	__ASSERT_NO_MSG(dev != NULL);
 	__ASSERT_NO_MSG(data != NULL);
 
 	struct ax5x43_drv_data *drv_data = dev->data;
-	int ret;
+	const bool long_access = force_long || (addr > AX5X43_LAST_DYN_REG);
 
-	__ASSERT_NO_MSG(addr <= AX5X43_LAST_DYN_REG);
-	__ASSERT_NO_MSG(count > 0);
-
-	uint8_t tx_data[] = { addr };
-	uint8_t rx_data[1];
-
-	const struct spi_buf tx_buf[] = {
-		{ .buf = &tx_data, .len = sizeof(tx_data) },
-	};
-
-	const struct spi_buf rx_buf[] = {
-		{ .buf = rx_data, .len = sizeof(rx_data) },
-		{ .buf = data, .len = count },
-	};
-
-	const struct spi_buf_set tx = {
-		.buffers = tx_buf,
-		.count = ARRAY_SIZE(tx_buf),
-	};
-
-	const struct spi_buf_set rx = {
-		.buffers = rx_buf,
-		.count = ARRAY_SIZE(rx_buf),
-	};
-
-	ret = spi_transceive(drv_data->spi, &drv_data->spi_cfg, &tx, &rx);
-	spi_release(drv_data->spi, &drv_data->spi_cfg);
-	if (ret < 0) {
-		return ret;
-	}
-
-	return rx_data[0] << 8;
-}
-
-static int read_long(const struct device *dev, uint16_t addr, size_t count,
-                     uint8_t *data)
-{
-	__ASSERT_NO_MSG(dev != NULL);
-	__ASSERT_NO_MSG(data != NULL);
-
-	struct ax5x43_drv_data *drv_data = dev->data;
-	int ret;
-
-	__ASSERT_NO_MSG(addr < 0x1000);
-	__ASSERT_NO_MSG(count > 0);
-
-	uint8_t tx_data[] = { (addr >> 8) | 0x70, addr & 0xff };
+	uint8_t tx_data[2];
 	uint8_t rx_data[2];
 
+	if (long_access) {
+		tx_data[0] = (addr >> 8) | 0x70;
+		tx_data[1] = addr & 0xff;
+	} else {
+		tx_data[0] = addr;
+		rx_data[1] = 0;
+	}
+
 	const struct spi_buf tx_buf[] = {
-		{ .buf = &tx_data, .len = sizeof(tx_data) },
+		{ .buf = &tx_data, .len = long_access ? 2 : 1 },
 	};
 
 	const struct spi_buf rx_buf[] = {
-		{ .buf = rx_data, .len = sizeof(rx_data) },
+		{ .buf = rx_data, .len = long_access ? 2 : 1 },
 		{ .buf = data, .len = count },
 	};
 
@@ -132,7 +94,7 @@ static int read_long(const struct device *dev, uint16_t addr, size_t count,
 		.count = ARRAY_SIZE(rx_buf),
 	};
 
-	ret = spi_transceive(drv_data->spi, &drv_data->spi_cfg, &tx, &rx);
+	int ret = spi_transceive(drv_data->spi, &drv_data->spi_cfg, &tx, &rx);
 	spi_release(drv_data->spi, &drv_data->spi_cfg);
 	if (ret < 0) {
 		return ret;
@@ -141,94 +103,46 @@ static int read_long(const struct device *dev, uint16_t addr, size_t count,
 	return sys_get_be16(rx_data);
 }
 
-static int read_data(const struct device *dev, uint16_t addr, size_t count,
-                     uint8_t *data)
-{
-	if (addr <= AX5X43_LAST_DYN_REG) {
-		return read_short(dev, addr, count, data);
-	} else {
-		return read_long(dev, addr, count, data);
-	}
-}
-
 static int read_u8(const struct device *dev, uint16_t addr, uint8_t *data)
 {
-	return read_data(dev, addr, 1, data);
+	return read_regs(dev, false, addr, 1, data);
 }
 
 static int read_u16(const struct device *dev, uint16_t addr, uint16_t *data)
 {
 	uint8_t buf[2];
-	int ret = read_data(dev, addr, 2, buf);
+	int ret = read_regs(dev, false, addr, 2, buf);
 	*data = sys_get_be16(buf);
 	return ret;
 }
 
-static int write_short(const struct device *dev, uint16_t addr, size_t count,
-                       const uint8_t *data)
+static int write_regs(const struct device *dev, bool force_long, uint16_t addr,
+                      size_t count, const uint8_t *data)
 {
 	__ASSERT_NO_MSG(dev != NULL);
 	__ASSERT_NO_MSG(data != NULL);
 
 	struct ax5x43_drv_data *drv_data = dev->data;
-	int ret;
+	const bool long_access = force_long || (addr > AX5X43_LAST_DYN_REG);
 
-	__ASSERT_NO_MSG(addr <= AX5X43_LAST_DYN_REG);
-	__ASSERT_NO_MSG(count > 0);
-
-	uint8_t tx_data[] = { addr | 0x80 };
-	uint8_t rx_data[1];
-
-	const struct spi_buf tx_buf[] = {
-		{ .buf = &tx_data, .len = sizeof(tx_data) },
-		{ .buf = (uint8_t *)data, .len = count },
-	};
-
-	const struct spi_buf rx_buf[] = {
-		{ .buf = rx_data, .len = sizeof(rx_data) },
-	};
-
-	const struct spi_buf_set tx = {
-		.buffers = tx_buf,
-		.count = ARRAY_SIZE(tx_buf),
-	};
-
-	const struct spi_buf_set rx = {
-		.buffers = rx_buf,
-		.count = ARRAY_SIZE(rx_buf),
-	};
-
-	ret = spi_transceive(drv_data->spi, &drv_data->spi_cfg, &tx, &rx);
-	spi_release(drv_data->spi, &drv_data->spi_cfg);
-	if (ret < 0) {
-		return ret;
-	}
-
-	return rx_data[0] << 8;
-}
-
-static int write_long(const struct device *dev, uint16_t addr, size_t count,
-                      const uint8_t *data)
-{
-	__ASSERT_NO_MSG(dev != NULL);
-	__ASSERT_NO_MSG(data != NULL);
-
-	struct ax5x43_drv_data *drv_data = dev->data;
-	int ret;
-
-	__ASSERT_NO_MSG(addr < 0x1000);
-	__ASSERT_NO_MSG(count > 0);
-
-	uint8_t tx_data[] = { (addr >> 8) | 0xF0, addr & 0xFF };
+	uint8_t tx_data[2] = { addr | 0x80 };
 	uint8_t rx_data[2];
 
+	if (long_access) {
+		tx_data[0] = (addr >> 8) | 0xF0;
+		tx_data[1] = addr & 0xFF;
+	} else {
+		tx_data[0] = addr | 0x80;
+		rx_data[1] = 0;
+	}
+
 	const struct spi_buf tx_buf[] = {
-		{ .buf = &tx_data, .len = sizeof(tx_data) },
+		{ .buf = &tx_data, .len = long_access ? 2 : 1 },
 		{ .buf = (uint8_t *)data, .len = count },
 	};
 
 	const struct spi_buf rx_buf[] = {
-		{ .buf = rx_data, .len = sizeof(rx_data) },
+		{ .buf = rx_data, .len = long_access ? 2 : 1 },
 	};
 
 	const struct spi_buf_set tx = {
@@ -241,7 +155,7 @@ static int write_long(const struct device *dev, uint16_t addr, size_t count,
 		.count = ARRAY_SIZE(rx_buf),
 	};
 
-	ret = spi_transceive(drv_data->spi, &drv_data->spi_cfg, &tx, &rx);
+	int ret = spi_transceive(drv_data->spi, &drv_data->spi_cfg, &tx, &rx);
 	spi_release(drv_data->spi, &drv_data->spi_cfg);
 	if (ret < 0) {
 		return ret;
@@ -250,26 +164,16 @@ static int write_long(const struct device *dev, uint16_t addr, size_t count,
 	return sys_get_be16(rx_data);
 }
 
-static int write_data(const struct device *dev, uint16_t addr, size_t count,
-                      const uint8_t *data)
-{
-	if (addr <= AX5X43_LAST_DYN_REG) {
-		return write_short(dev, addr, count, data);
-	} else {
-		return write_long(dev, addr, count, data);
-	}
-}
-
 static int write_u8(const struct device *dev, uint16_t addr, uint8_t data)
 {
-	return write_data(dev, addr, 1, &data);
+	return write_regs(dev, false, addr, 1, &data);
 }
 
 static int write_u16(const struct device *dev, uint16_t addr, uint16_t data)
 {
 	uint8_t buf[2];
 	sys_put_be16(data, buf);
-	return read_data(dev, addr, 2, buf);
+	return write_regs(dev, false, addr, 2, buf);
 }
 
 #define CONFIGURE_PIN(name, extra_flags)                                         \
@@ -367,7 +271,7 @@ static int ax5x43_init(const struct device *dev)
 		.flags = DT_INST_GPIO_FLAGS(inst, name) \
 	}
 
-#define AX5X43_INIT(inst)                                               \
+#define AX5X43_INIT(inst)                                                 \
 	static const struct ax5x43_config ax5x43_##inst##_config = {    \
 		.spi_dev_name = DT_INST_BUS_LABEL(inst),                \
 		.slave = DT_INST_REG_ADDR(inst),                        \
@@ -380,11 +284,11 @@ static int ax5x43_init(const struct device *dev)
 			},))                                            \
 		IF_ENABLED(DT_INST_NODE_HAS_PROP(inst, irq_gpios),      \
 			(.irq = PIN_CONFIG(inst, irq_gpios),))          \
-	};                                                              \
-	static struct ax5x43_drv_data ax5x43_##inst##_drvdata = {};     \
-	DEVICE_DT_INST_DEFINE(inst, ax5x43_init, NULL,                  \
-	                      &ax5x43_##inst##_drvdata,                 \
-	                      &ax5x43_##inst##_config, POST_KERNEL,     \
+	}; \
+	static struct ax5x43_drv_data ax5x43_##inst##_drvdata = {};       \
+	DEVICE_DT_INST_DEFINE(inst, ax5x43_init, NULL,                    \
+	                      &ax5x43_##inst##_drvdata,                   \
+	                      &ax5x43_##inst##_config, POST_KERNEL,       \
 	                      CONFIG_AX5X43_INIT_PRIORITY, NULL);
 
 DT_INST_FOREACH_STATUS_OKAY(AX5X43_INIT)
