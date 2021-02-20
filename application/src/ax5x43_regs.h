@@ -6,6 +6,24 @@
 
 #ifndef APPLICATION_SRC_AX5X43_REGS_H_
 #define APPLICATION_SRC_AX5X43_REGS_H_
+#include <sys/util.h>
+
+/* SPI Status Bits. */
+#define AX5X43_STATUS_POWERED       BIT(15)
+#define AX5X43_STAT_PLL_LOCK        BIT(14)
+#define AX5X43_STAT_FIFO_OVER       BIT(13)
+#define AX5X43_STAT_FIFO_UNDER      BIT(12)
+#define AX5X43_STAT_THRES_FREE      BIT(11)
+#define AX5X43_STAT_THRES_COUNT     BIT(10)
+#define AX5X43_STAT_FIFO_FULL       BIT(9)
+#define AX5X43_STAT_FIFO_EMPTY      BIT(8)
+#define AX5X43_STAT_PWRGOOD         BIT(7)
+#define AX5X43_STAT_PWR_INT_PEND    BIT(6)
+#define AX5X43_STAT_RADIO_EVT_PEND  BIT(5)
+#define AX5X43_STAT_XTAL_OSC_RUNN   BIT(4)
+#define AX5X43_STAT_WAKEUP_INT_PEND BIT(3)
+#define AX5X43_STAT_LPOSC_INT_PEND  BIT(2)
+#define AX5X43_STAT_GPADC_INT_PEND  BIT(1)
 
 /** Last register that can be accessed using short address. */
 #define AX5X43_LAST_DYN_REG        0x06F
