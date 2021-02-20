@@ -19,11 +19,11 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(ax5x43);
 
-static void irq_handler(const struct device *port,
-	struct gpio_callback *cb, gpio_port_pins_t pins)
+static void irq_handler(const struct device *port, struct gpio_callback *cb,
+                        gpio_port_pins_t pins)
 {
 	struct ax5x43_drv_data *drv_data =
-		CONTAINER_OF(cb, struct ax5x43_drv_data, irq_cb);
+	        CONTAINER_OF(cb, struct ax5x43_drv_data, irq_cb);
 
 	if (drv_data->callback == NULL) {
 		return;
@@ -42,12 +42,11 @@ int ax5x43_configure_interrupt(const struct device *dev, bool enable)
 		return -ENOTSUP;
 	}
 
-	gpio_flags_t flags = enable ?
-		(GPIO_INT_ENABLE | GPIO_INT_EDGE_RISING) :
-		GPIO_INT_DISABLE;
+	gpio_flags_t flags = enable ? (GPIO_INT_ENABLE | GPIO_INT_EDGE_RISING) :
+	                              GPIO_INT_DISABLE;
 
 	return gpio_pin_interrupt_configure(drv_data->irq_dev, config->irq.pin,
-		flags);
+	                                    flags);
 }
 
 void ax5x43_set_callback(const struct device *dev, ax5x43_callback callback)
@@ -56,7 +55,8 @@ void ax5x43_set_callback(const struct device *dev, ax5x43_callback callback)
 	drv_data->callback = callback;
 }
 
-static int read_short(const struct device *dev, uint16_t addr, size_t count, uint8_t *data)
+static int read_short(const struct device *dev, uint16_t addr, size_t count,
+                      uint8_t *data)
 {
 	__ASSERT_NO_MSG(dev != NULL);
 	__ASSERT_NO_MSG(data != NULL);
@@ -67,25 +67,16 @@ static int read_short(const struct device *dev, uint16_t addr, size_t count, uin
 	__ASSERT_NO_MSG(addr <= AX5X43_LAST_DYN_REG);
 	__ASSERT_NO_MSG(count > 0);
 
-	uint8_t tx_data[] = {addr};
+	uint8_t tx_data[] = { addr };
 	uint8_t rx_data[1];
 
 	const struct spi_buf tx_buf[] = {
-		{
-			.len = sizeof(tx_data),
-			.buf = &tx_data,
-		},
+		{ .buf = &tx_data, .len = sizeof(tx_data) },
 	};
 
 	const struct spi_buf rx_buf[] = {
-		{
-			.len = sizeof(rx_data),
-			.buf = rx_data,
-		},
-		{
-			.len = count,
-			.buf = data,
-		},
+		{ .buf = rx_data, .len = sizeof(rx_data) },
+		{ .buf = data, .len = count },
 	};
 
 	const struct spi_buf_set tx = {
@@ -107,7 +98,8 @@ static int read_short(const struct device *dev, uint16_t addr, size_t count, uin
 	return rx_data[0] << 8;
 }
 
-static int read_long(const struct device *dev, uint16_t addr, size_t count, uint8_t *data)
+static int read_long(const struct device *dev, uint16_t addr, size_t count,
+                     uint8_t *data)
 {
 	__ASSERT_NO_MSG(dev != NULL);
 	__ASSERT_NO_MSG(data != NULL);
@@ -118,25 +110,16 @@ static int read_long(const struct device *dev, uint16_t addr, size_t count, uint
 	__ASSERT_NO_MSG(addr < 0x1000);
 	__ASSERT_NO_MSG(count > 0);
 
-	uint8_t tx_data[] = {(addr >> 8) | 0x70, addr & 0xff};
+	uint8_t tx_data[] = { (addr >> 8) | 0x70, addr & 0xff };
 	uint8_t rx_data[2];
 
 	const struct spi_buf tx_buf[] = {
-		{
-			.len = sizeof(tx_data),
-			.buf = &tx_data,
-		},
+		{ .buf = &tx_data, .len = sizeof(tx_data) },
 	};
 
 	const struct spi_buf rx_buf[] = {
-		{
-			.len = sizeof(rx_data),
-			.buf = rx_data,
-		},
-		{
-			.len = count,
-			.buf = data,
-		},
+		{ .buf = rx_data, .len = sizeof(rx_data) },
+		{ .buf = data, .len = count },
 	};
 
 	const struct spi_buf_set tx = {
@@ -158,7 +141,8 @@ static int read_long(const struct device *dev, uint16_t addr, size_t count, uint
 	return sys_get_be16(rx_data);
 }
 
-static int read_data(const struct device *dev, uint16_t addr, size_t count, uint8_t *data)
+static int read_data(const struct device *dev, uint16_t addr, size_t count,
+                     uint8_t *data)
 {
 	if (addr <= AX5X43_LAST_DYN_REG) {
 		return read_short(dev, addr, count, data);
@@ -180,7 +164,8 @@ static int read_u16(const struct device *dev, uint16_t addr, uint16_t *data)
 	return ret;
 }
 
-static int write_short(const struct device *dev, uint16_t addr, size_t count, const uint8_t *data)
+static int write_short(const struct device *dev, uint16_t addr, size_t count,
+                       const uint8_t *data)
 {
 	__ASSERT_NO_MSG(dev != NULL);
 	__ASSERT_NO_MSG(data != NULL);
@@ -191,25 +176,16 @@ static int write_short(const struct device *dev, uint16_t addr, size_t count, co
 	__ASSERT_NO_MSG(addr <= AX5X43_LAST_DYN_REG);
 	__ASSERT_NO_MSG(count > 0);
 
-	uint8_t tx_data[] = {addr | 0x80};
+	uint8_t tx_data[] = { addr | 0x80 };
 	uint8_t rx_data[1];
 
 	const struct spi_buf tx_buf[] = {
-		{
-			.len = sizeof(tx_data),
-			.buf = &tx_data,
-		},
-		{
-			.len = count,
-			.buf = (uint8_t *)data,
-		},
+		{ .buf = &tx_data, .len = sizeof(tx_data) },
+		{ .buf = (uint8_t *)data, .len = count },
 	};
 
 	const struct spi_buf rx_buf[] = {
-		{
-			.len = sizeof(rx_data),
-			.buf = rx_data,
-		},
+		{ .buf = rx_data, .len = sizeof(rx_data) },
 	};
 
 	const struct spi_buf_set tx = {
@@ -231,7 +207,8 @@ static int write_short(const struct device *dev, uint16_t addr, size_t count, co
 	return rx_data[0] << 8;
 }
 
-static int write_long(const struct device *dev, uint16_t addr, size_t count, const uint8_t *data)
+static int write_long(const struct device *dev, uint16_t addr, size_t count,
+                      const uint8_t *data)
 {
 	__ASSERT_NO_MSG(dev != NULL);
 	__ASSERT_NO_MSG(data != NULL);
@@ -242,25 +219,16 @@ static int write_long(const struct device *dev, uint16_t addr, size_t count, con
 	__ASSERT_NO_MSG(addr < 0x1000);
 	__ASSERT_NO_MSG(count > 0);
 
-	uint8_t tx_data[] = {(addr >> 8) | 0xF0, addr & 0xFF};
+	uint8_t tx_data[] = { (addr >> 8) | 0xF0, addr & 0xFF };
 	uint8_t rx_data[2];
 
 	const struct spi_buf tx_buf[] = {
-		{
-			.len = sizeof(tx_data),
-			.buf = &tx_data,
-		},
-		{
-			.len = count,
-			.buf = (uint8_t *)data,
-		},
+		{ .buf = &tx_data, .len = sizeof(tx_data) },
+		{ .buf = (uint8_t *)data, .len = count },
 	};
 
 	const struct spi_buf rx_buf[] = {
-		{
-			.len = sizeof(rx_data),
-			.buf = rx_data,
-		}
+		{ .buf = rx_data, .len = sizeof(rx_data) },
 	};
 
 	const struct spi_buf_set tx = {
@@ -282,7 +250,8 @@ static int write_long(const struct device *dev, uint16_t addr, size_t count, con
 	return sys_get_be16(rx_data);
 }
 
-static int write_data(const struct device *dev, uint16_t addr, size_t count, const uint8_t *data)
+static int write_data(const struct device *dev, uint16_t addr, size_t count,
+                      const uint8_t *data)
 {
 	if (addr <= AX5X43_LAST_DYN_REG) {
 		return write_short(dev, addr, count, data);
@@ -303,22 +272,25 @@ static int write_u16(const struct device *dev, uint16_t addr, uint16_t data)
 	return read_data(dev, addr, 2, buf);
 }
 
-
-#define CONFIGURE_PIN(name, extra_flags)					\
-({if (config->name.dev) {							\
-	drv_data->name##_dev = device_get_binding(config->name.dev);		\
-	if (!drv_data->name##_dev) {						\
-		LOG_ERR("Unable to get GPIO device for " #name);		\
-		return -ENODEV;							\
-	}									\
-	int ret = gpio_pin_configure(drv_data->name##_dev, config->name.pin,	\
-		config->name.flags | (extra_flags));				\
-	if (ret < 0) {								\
-		return ret;							\
-	}									\
-	LOG_DBG(#name " configured on %s:%u",					\
-		config->name.dev, config->name.pin);				\
-}})
+#define CONFIGURE_PIN(name, extra_flags)                                         \
+	({                                                                       \
+		if (config->name.dev) {                                          \
+			drv_data->name##_dev =                                   \
+			        device_get_binding(config->name.dev);            \
+			if (!drv_data->name##_dev) {                             \
+				LOG_ERR("Unable to get GPIO device for " #name); \
+				return -ENODEV;                                  \
+			}                                                        \
+			int ret = gpio_pin_configure(                            \
+			        drv_data->name##_dev, config->name.pin,          \
+			        config->name.flags | (extra_flags));             \
+			if (ret < 0) {                                           \
+				return ret;                                      \
+			}                                                        \
+			LOG_DBG(#name " configured on %s:%u",                    \
+			        config->name.dev, config->name.pin);             \
+		}                                                                \
+	})
 
 static int ax5x43_init(const struct device *dev)
 {
@@ -347,28 +319,24 @@ static int ax5x43_init(const struct device *dev)
 
 		drv_data->spi_cfg.cs = &drv_data->cs_ctrl;
 
-		gpio_pin_configure(drv_data->cs_ctrl.gpio_dev,
-			config->cs.pin,
-			config->cs.flags | GPIO_OUTPUT_HIGH);
+		gpio_pin_configure(drv_data->cs_ctrl.gpio_dev, config->cs.pin,
+		                   config->cs.flags | GPIO_OUTPUT_HIGH);
 
 		LOG_DBG("CS configured on %s:%u", config->cs.dev,
-			config->cs.flags);
+		        config->cs.flags);
 	}
 
 	drv_data->spi_cfg.frequency = config->freq;
-	drv_data->spi_cfg.operation = SPI_OP_MODE_MASTER |
-				      SPI_TRANSFER_MSB |
-				      SPI_WORD_SET(8) |
-				      SPI_LINES_SINGLE |
-				      SPI_HOLD_ON_CS |
-				      SPI_LOCK_ON;
+	drv_data->spi_cfg.operation = SPI_OP_MODE_MASTER | SPI_TRANSFER_MSB |
+	                              SPI_WORD_SET(8) | SPI_LINES_SINGLE |
+	                              SPI_HOLD_ON_CS | SPI_LOCK_ON;
 	drv_data->spi_cfg.slave = config->slave;
 
 	CONFIGURE_PIN(irq, GPIO_INPUT);
 
 	if (drv_data->irq_dev) {
 		gpio_init_callback(&drv_data->irq_cb, &irq_handler,
-			BIT(config->irq.pin));
+		                   BIT(config->irq.pin));
 		gpio_add_callback(drv_data->irq_dev, &drv_data->irq_cb);
 	}
 
@@ -392,36 +360,31 @@ static int ax5x43_init(const struct device *dev)
 	return 0;
 }
 
-#define PIN_CONFIG(inst, name)							\
-{										\
-	.dev = DT_INST_GPIO_LABEL(inst, name),					\
-	.pin = DT_INST_GPIO_PIN(inst, name),					\
-	.flags = DT_INST_GPIO_FLAGS(inst, name)					\
-}
+#define PIN_CONFIG(inst, name)                          \
+	{                                               \
+		.dev = DT_INST_GPIO_LABEL(inst, name),  \
+		.pin = DT_INST_GPIO_PIN(inst, name),    \
+		.flags = DT_INST_GPIO_FLAGS(inst, name) \
+	}
 
-#define AX5X43_INIT(inst)							\
-	static const struct ax5x43_config ax5x43_##inst##_config = {		\
-		.spi_dev_name = DT_INST_BUS_LABEL(inst),			\
-		.slave = DT_INST_REG_ADDR(inst),				\
-		.freq = DT_INST_PROP(inst, spi_max_frequency),			\
-										\
-		IF_ENABLED(DT_INST_SPI_DEV_HAS_CS_GPIOS(inst),			\
-			(.cs = {						\
-				DT_INST_SPI_DEV_CS_GPIOS_LABEL(inst),		\
-				DT_INST_SPI_DEV_CS_GPIOS_PIN(inst),		\
-				DT_INST_SPI_DEV_CS_GPIOS_FLAGS(inst),		\
-			},))							\
-										\
-		IF_ENABLED(DT_INST_NODE_HAS_PROP(inst, irq_gpios),		\
-			(.irq = PIN_CONFIG(inst, irq_gpios),))			\
-	};									\
-										\
-	static struct ax5x43_drv_data ax5x43_##inst##_drvdata = {		\
-	};									\
-										\
-	DEVICE_DT_INST_DEFINE(inst, ax5x43_init, NULL,				\
-			      &ax5x43_##inst##_drvdata,				\
-			      &ax5x43_##inst##_config, POST_KERNEL,		\
-			      CONFIG_AX5X43_INIT_PRIORITY, NULL);
+#define AX5X43_INIT(inst)                                               \
+	static const struct ax5x43_config ax5x43_##inst##_config = {    \
+		.spi_dev_name = DT_INST_BUS_LABEL(inst),                \
+		.slave = DT_INST_REG_ADDR(inst),                        \
+		.freq = DT_INST_PROP(inst, spi_max_frequency),          \
+		IF_ENABLED(DT_INST_SPI_DEV_HAS_CS_GPIOS(inst),          \
+			(.cs = {                                        \
+				DT_INST_SPI_DEV_CS_GPIOS_LABEL(inst),   \
+				DT_INST_SPI_DEV_CS_GPIOS_PIN(inst),     \
+				DT_INST_SPI_DEV_CS_GPIOS_FLAGS(inst),   \
+			},))                                            \
+		IF_ENABLED(DT_INST_NODE_HAS_PROP(inst, irq_gpios),      \
+			(.irq = PIN_CONFIG(inst, irq_gpios),))          \
+	};                                                              \
+	static struct ax5x43_drv_data ax5x43_##inst##_drvdata = {};     \
+	DEVICE_DT_INST_DEFINE(inst, ax5x43_init, NULL,                  \
+	                      &ax5x43_##inst##_drvdata,                 \
+	                      &ax5x43_##inst##_config, POST_KERNEL,     \
+	                      CONFIG_AX5X43_INIT_PRIORITY, NULL);
 
 DT_INST_FOREACH_STATUS_OKAY(AX5X43_INIT)
