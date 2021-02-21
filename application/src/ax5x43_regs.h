@@ -238,6 +238,9 @@
 #define AX5X43_REG_DACVALUE        0x330 /* DAC Value */
 #define AX5X43_REG_DACCONFIG       0x332 /* DAC Configuration */
 
+/* Performance Tuning */
+#define AX5X43_REG_XTALOSC         0xF10 /* Ibias */
+#define AX5X43_REG_XTALAMP         0xF11 /* Ibias autoreg. */
 
 #define AX5X43_REVISION_VALUE        0x51
 

@@ -10,5 +10,6 @@
 		reg = <0>;
 
 		irq-gpios = <&gpioa 8 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
+		clock-frequency = <24000000>;
 	};
 };

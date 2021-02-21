@@ -241,6 +241,24 @@ static int ax5x43_reset(const struct device *dev)
 	return 0;
 }
 
+static int ax5x43_config_oscillator(const struct device *dev)
+{
+	/* Configuration for a clipped sinewave oscillator. */
+	int ret = ax5x43_write_u8(dev, AX5X43_REG_XTALOSC, 0x04);
+	if (ret < 0) {
+		return ret;
+	}
+
+	ret = ax5x43_write_u8(dev, AX5X43_REG_XTALAMP, 0x00);
+	if (ret < 0) {
+		return ret;
+	}
+
+	ret = ax5x43_write_u8(dev, AX5X43_REG_XTALCAP, 0x00);
+
+	return ret;
+}
+
 #define CONFIGURE_PIN(name, extra_flags)                                         \
 	({                                                                       \
 		if (config->name.dev) {                                          \
@@ -315,6 +333,12 @@ static int ax5x43_init(const struct device *dev)
 		return ret;
 	}
 
+	ret = ax5x43_config_oscillator(dev);
+	if (ret < 0) {
+		LOG_ERR("Oscillator configuration failed");
+		return ret;
+	}
+
 	LOG_DBG("Initialization successful");
 
 	return 0;
@@ -332,6 +356,7 @@ static int ax5x43_init(const struct device *dev)
 		.spi_dev_name = DT_INST_BUS_LABEL(inst),                \
 		.slave = DT_INST_REG_ADDR(inst),                        \
 		.freq = DT_INST_PROP(inst, spi_max_frequency),          \
+		.clock_freq = DT_INST_PROP(inst, clock_frequency),      \
 		IF_ENABLED(DT_INST_SPI_DEV_HAS_CS_GPIOS(inst),          \
 			(.cs = {                                        \
 				DT_INST_SPI_DEV_CS_GPIOS_LABEL(inst),   \

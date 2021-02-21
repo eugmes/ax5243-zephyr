@@ -15,3 +15,8 @@ include: [spi-device.yaml]
 properties:
     irq-gpios:
       type: phandle-array
+
+    clock-frequency:
+      type: int
+      required: true
+      description: Clock frequency in Hz.

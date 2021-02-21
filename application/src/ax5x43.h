@@ -28,6 +28,7 @@ struct ax5x43_config {
 	const char *spi_dev_name;
 	uint16_t slave;
 	uint32_t freq;
+	uint32_t clock_freq;
 	struct ax5x43_gpio_pin_config cs;
 	struct ax5x43_gpio_pin_config irq;
 };
