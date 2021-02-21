@@ -238,4 +238,24 @@
 #define AX5X43_REG_DACVALUE        0x330 /* DAC Value */
 #define AX5X43_REG_DACCONFIG       0x332 /* DAC Configuration */
 
+
+#define AX5X43_REVISION_VALUE        0x51
+
+#define AX5X43_SCRATCH_VALUE         0xC5
+
+#define AX5X43_PWRMODE_PWRMODE_MASK  BIT_MASK(4)
+#define AX5X43_PWRMODE_POWERDOWN     0x0
+#define AX5X43_PWRMODE_DEEPSLEEP     0x1
+#define AX5X43_PWRMODE_STANDBY       0x5
+#define AX5X43_PWRMODE_FIFOON        0x7
+#define AX5X43_PWRMODE_SYNTHRX       0x8
+#define AX5X43_PWRMODE_FULLRX        0x9
+#define AX5X43_PWRMODE_WORRX         0xB
+#define AX5X43_PWRMODE_SYNTHTX       0xC
+#define AX5X43_PWRMODE_FULLTX        0xD
+#define AX5X43_PWRMODE_WDS           BIT(4)
+#define AX5X43_PWRMODE_XOEN          BIT(5)
+#define AX5X43_PWRMODE_REFEN         BIT(6)
+#define AX5X43_PWRMODE_RST           BIT(7)
+
 #endif

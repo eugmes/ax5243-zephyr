@@ -55,8 +55,8 @@ void ax5x43_set_callback(const struct device *dev, ax5x43_callback callback)
 	drv_data->callback = callback;
 }
 
-static int read_regs(const struct device *dev, bool force_long, uint16_t addr,
-                     size_t count, uint8_t *data)
+static int ax5x43_read_regs(const struct device *dev, bool force_long,
+                            uint16_t addr, size_t count, uint8_t *data)
 {
 	__ASSERT_NO_MSG(dev != NULL);
 	__ASSERT_NO_MSG(data != NULL);
@@ -103,21 +103,23 @@ static int read_regs(const struct device *dev, bool force_long, uint16_t addr,
 	return sys_get_be16(rx_data);
 }
 
-static int read_u8(const struct device *dev, uint16_t addr, uint8_t *data)
+static int ax5x43_read_u8(const struct device *dev, uint16_t addr,
+                          uint8_t *data)
 {
-	return read_regs(dev, false, addr, 1, data);
+	return ax5x43_read_regs(dev, false, addr, 1, data);
 }
 
-static int read_u16(const struct device *dev, uint16_t addr, uint16_t *data)
+static int ax5x43_read_u16(const struct device *dev, uint16_t addr,
+                           uint16_t *data)
 {
 	uint8_t buf[2];
-	int ret = read_regs(dev, false, addr, 2, buf);
+	int ret = ax5x43_read_regs(dev, false, addr, 2, buf);
 	*data = sys_get_be16(buf);
 	return ret;
 }
 
-static int write_regs(const struct device *dev, bool force_long, uint16_t addr,
-                      size_t count, const uint8_t *data)
+static int ax5x43_write_regs(const struct device *dev, bool force_long,
+                             uint16_t addr, size_t count, const uint8_t *data)
 {
 	__ASSERT_NO_MSG(dev != NULL);
 	__ASSERT_NO_MSG(data != NULL);
@@ -164,16 +166,79 @@ static int write_regs(const struct device *dev, bool force_long, uint16_t addr,
 	return sys_get_be16(rx_data);
 }
 
-static int write_u8(const struct device *dev, uint16_t addr, uint8_t data)
+static int ax5x43_write_u8(const struct device *dev, uint16_t addr,
+                           uint8_t data)
 {
-	return write_regs(dev, false, addr, 1, &data);
+	return ax5x43_write_regs(dev, false, addr, 1, &data);
 }
 
-static int write_u16(const struct device *dev, uint16_t addr, uint16_t data)
+static int ax5x43_write_u16(const struct device *dev, uint16_t addr,
+                            uint16_t data)
 {
 	uint8_t buf[2];
 	sys_put_be16(data, buf);
-	return write_regs(dev, false, addr, 2, buf);
+	return ax5x43_write_regs(dev, false, addr, 2, buf);
+}
+
+static int ax5x43_reset(const struct device *dev)
+{
+	int ret;
+	uint8_t reg;
+
+	/* Ensure that the chip is not in the deep sleep mode. */
+	do {
+		ret = ax5x43_read_u8(dev, AX5X43_REG_REVISION, &reg);
+		if (ret < 0) {
+			return ret;
+		}
+	} while ((ret & AX5X43_STATUS_POWERED) == 0);
+
+	__ASSERT(reg == AX5X43_REVISION, "Invalid chip revision %02x", reg);
+
+	/* Reset the chip */
+	ret = ax5x43_write_u8(dev, AX5X43_REG_PWRMODE,
+	                      AX5X43_PWRMODE_RST | AX5X43_PWRMODE_POWERDOWN);
+	if (ret < 0) {
+		LOG_ERR("Failed to assert RST");
+		return ret;
+	}
+	ret = ax5x43_write_u8(dev, AX5X43_REG_PWRMODE,
+	                      AX5X43_PWRMODE_POWERDOWN);
+	if (ret < 0) {
+		LOG_ERR("Failed to clear RST");
+		return ret;
+	}
+
+	/* Try accessing scratch register to ensure that chip is working. */
+	ret = ax5x43_read_u8(dev, AX5X43_REG_SCRATCH, &reg);
+	if (ret < 0) {
+		LOG_ERR("Failed to read SCRATCH register");
+		return ret;
+	}
+
+	if (reg != AX5X43_SCRATCH_VALUE) {
+		LOG_ERR("Invalid SCRATCH value: %02x", reg);
+		return -EIO;
+	}
+
+	ret = ax5x43_write_u8(dev, AX5X43_REG_SCRATCH, 42);
+	if (ret < 0) {
+		LOG_ERR("Failed to update SCRATCH register");
+		return ret;
+	}
+
+	ret = ax5x43_read_u8(dev, AX5X43_REG_SCRATCH, &reg);
+	if (ret < 0) {
+		LOG_ERR("Failed to read back SCRATCH register");
+		return ret;
+	}
+
+	if (reg != 42) {
+		LOG_ERR("Invalid SCRATCH read back: %02x", reg);
+		return -EIO;
+	}
+
+	return 0;
 }
 
 #define CONFIGURE_PIN(name, extra_flags)                                         \
@@ -244,22 +309,13 @@ static int ax5x43_init(const struct device *dev)
 		gpio_add_callback(drv_data->irq_dev, &drv_data->irq_cb);
 	}
 
-	uint8_t reg;
-	int ret = read_u8(dev, AX5X43_REG_REVISION, &reg);
-
+	int ret = ax5x43_reset(dev);
 	if (ret < 0) {
-		LOG_ERR("Failed to read REVISION: %d", ret);
-	} else {
-		LOG_DBG("REVISION: %02x, status: %04x", (unsigned)reg, ret);
+		LOG_ERR("Reset failed");
+		return ret;
 	}
 
-	ret = read_u8(dev, AX5X43_REG_SCRATCH, &reg);
-
-	if (ret < 0) {
-		LOG_ERR("Failed to read SCRATCH: %d", ret);
-	} else {
-		LOG_DBG("SCRATCH: %02x, status: %04x", (unsigned)reg, ret);
-	}
+	LOG_DBG("Initialization successful");
 
 	return 0;
 }
