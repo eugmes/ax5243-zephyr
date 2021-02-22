@@ -344,8 +344,8 @@ static int ax5x43_init(const struct device *dev)
 		.flags = DT_INST_GPIO_FLAGS(inst, name) \
 	}
 
-#define AX5X43_INIT(inst)                                              \
-	static struct ax5x43_drv_data ax5x43_##inst##_drvdata = {};    \
+#define AX5X43_INIT(inst)                                               \
+	static struct ax5x43_drv_data ax5x43_##inst##_drvdata = {};     \
 	static const struct ax5x43_config ax5x43_##inst##_config = { \
 		.spi_dev_name = DT_INST_BUS_LABEL(inst), \
 		.spi_cfg = { \
@@ -365,10 +365,10 @@ static int ax5x43_init(const struct device *dev)
 			},))                                            \
 		IF_ENABLED(DT_INST_NODE_HAS_PROP(inst, irq_gpios),      \
 			(.irq = PIN_CONFIG(inst, irq_gpios),))          \
-	}; \
-	DEVICE_DT_INST_DEFINE(inst, ax5x43_init, NULL,                 \
-	                      &ax5x43_##inst##_drvdata,                \
-	                      &ax5x43_##inst##_config, POST_KERNEL,    \
+	};  \
+	DEVICE_DT_INST_DEFINE(inst, ax5x43_init, device_pm_control_nop, \
+	                      &ax5x43_##inst##_drvdata,                 \
+	                      &ax5x43_##inst##_config, POST_KERNEL,     \
 	                      CONFIG_AX5X43_INIT_PRIORITY, NULL);
 
 DT_INST_FOREACH_STATUS_OKAY(AX5X43_INIT)
