@@ -26,8 +26,7 @@ struct ax5x43_gpio_pin_config {
 
 struct ax5x43_config {
 	const char *spi_dev_name;
-	uint16_t slave;
-	uint32_t freq;
+	struct spi_config spi_cfg;
 	uint32_t clock_freq;
 	struct ax5x43_gpio_pin_config cs;
 	struct ax5x43_gpio_pin_config irq;
@@ -36,8 +35,7 @@ struct ax5x43_config {
 struct ax5x43_drv_data {
 	/** Master SPI device */
 	const struct device *spi;
-	struct spi_config spi_cfg;
-	struct spi_cs_control cs_ctrl;
+	struct spi_cs_control spi_cs;
 
 	/* Backling to ease handling of GPIO interrupts. */
 	const struct device *dev;

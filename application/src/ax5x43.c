@@ -61,6 +61,7 @@ static int ax5x43_read_regs(const struct device *dev, bool force_long,
 	__ASSERT_NO_MSG(dev != NULL);
 	__ASSERT_NO_MSG(data != NULL);
 
+	const struct ax5x43_config *config = dev->config;
 	struct ax5x43_drv_data *drv_data = dev->data;
 	const bool long_access = force_long || (addr > AX5X43_LAST_DYN_REG);
 
@@ -94,8 +95,8 @@ static int ax5x43_read_regs(const struct device *dev, bool force_long,
 		.count = ARRAY_SIZE(rx_buf),
 	};
 
-	int ret = spi_transceive(drv_data->spi, &drv_data->spi_cfg, &tx, &rx);
-	spi_release(drv_data->spi, &drv_data->spi_cfg);
+	int ret = spi_transceive(drv_data->spi, &config->spi_cfg, &tx, &rx);
+	spi_release(drv_data->spi, &config->spi_cfg);
 	if (ret < 0) {
 		return ret;
 	}
@@ -124,6 +125,7 @@ static int ax5x43_write_regs(const struct device *dev, bool force_long,
 	__ASSERT_NO_MSG(dev != NULL);
 	__ASSERT_NO_MSG(data != NULL);
 
+	const struct ax5x43_config *config = dev->config;
 	struct ax5x43_drv_data *drv_data = dev->data;
 	const bool long_access = force_long || (addr > AX5X43_LAST_DYN_REG);
 
@@ -157,8 +159,8 @@ static int ax5x43_write_regs(const struct device *dev, bool force_long,
 		.count = ARRAY_SIZE(rx_buf),
 	};
 
-	int ret = spi_transceive(drv_data->spi, &drv_data->spi_cfg, &tx, &rx);
-	spi_release(drv_data->spi, &drv_data->spi_cfg);
+	int ret = spi_transceive(drv_data->spi, &config->spi_cfg, &tx, &rx);
+	spi_release(drv_data->spi, &config->spi_cfg);
 	if (ret < 0) {
 		return ret;
 	}
@@ -295,29 +297,20 @@ static int ax5x43_init(const struct device *dev)
 
 	if (config->cs.dev) {
 		/* handle SPI CS thru GPIO if it is the case */
-		drv_data->cs_ctrl.gpio_dev = device_get_binding(config->cs.dev);
-		if (!drv_data->cs_ctrl.gpio_dev) {
+		drv_data->spi_cs.gpio_dev = device_get_binding(config->cs.dev);
+		if (!drv_data->spi_cs.gpio_dev) {
 			LOG_ERR("Unable to get GPIO SPI CS device");
 			return -ENODEV;
 		}
-		drv_data->cs_ctrl.gpio_pin = config->cs.pin;
-		drv_data->cs_ctrl.gpio_dt_flags = config->cs.flags;
-		drv_data->cs_ctrl.delay = 1;
+		drv_data->spi_cs.gpio_pin = config->cs.pin;
+		drv_data->spi_cs.gpio_dt_flags = config->cs.flags;
 
-		drv_data->spi_cfg.cs = &drv_data->cs_ctrl;
-
-		gpio_pin_configure(drv_data->cs_ctrl.gpio_dev, config->cs.pin,
+		gpio_pin_configure(drv_data->spi_cs.gpio_dev, config->cs.pin,
 		                   config->cs.flags | GPIO_OUTPUT_HIGH);
 
 		LOG_DBG("CS configured on %s:%u", config->cs.dev,
 		        config->cs.flags);
 	}
-
-	drv_data->spi_cfg.frequency = config->freq;
-	drv_data->spi_cfg.operation = SPI_OP_MODE_MASTER | SPI_TRANSFER_MSB |
-	                              SPI_WORD_SET(8) | SPI_LINES_SINGLE |
-	                              SPI_HOLD_ON_CS | SPI_LOCK_ON;
-	drv_data->spi_cfg.slave = config->slave;
 
 	CONFIGURE_PIN(irq, GPIO_INPUT);
 
@@ -351,11 +344,18 @@ static int ax5x43_init(const struct device *dev)
 		.flags = DT_INST_GPIO_FLAGS(inst, name) \
 	}
 
-#define AX5X43_INIT(inst)                                                 \
-	static const struct ax5x43_config ax5x43_##inst##_config = {    \
-		.spi_dev_name = DT_INST_BUS_LABEL(inst),                \
-		.slave = DT_INST_REG_ADDR(inst),                        \
-		.freq = DT_INST_PROP(inst, spi_max_frequency),          \
+#define AX5X43_INIT(inst)                                              \
+	static struct ax5x43_drv_data ax5x43_##inst##_drvdata = {};    \
+	static const struct ax5x43_config ax5x43_##inst##_config = { \
+		.spi_dev_name = DT_INST_BUS_LABEL(inst), \
+		.spi_cfg = { \
+			.operation = (SPI_OP_MODE_MASTER | SPI_TRANSFER_MSB | \
+				      SPI_WORD_SET(8) | SPI_LINES_SINGLE | \
+				      SPI_HOLD_ON_CS | SPI_LOCK_ON), \
+			.frequency = DT_INST_PROP(inst, spi_max_frequency), \
+			.slave = DT_INST_REG_ADDR(inst), \
+			.cs = &ax5x43_##inst##_drvdata.spi_cs, \
+		}, \
 		.clock_freq = DT_INST_PROP(inst, clock_frequency),      \
 		IF_ENABLED(DT_INST_SPI_DEV_HAS_CS_GPIOS(inst),          \
 			(.cs = {                                        \
@@ -366,10 +366,9 @@ static int ax5x43_init(const struct device *dev)
 		IF_ENABLED(DT_INST_NODE_HAS_PROP(inst, irq_gpios),      \
 			(.irq = PIN_CONFIG(inst, irq_gpios),))          \
 	}; \
-	static struct ax5x43_drv_data ax5x43_##inst##_drvdata = {};       \
-	DEVICE_DT_INST_DEFINE(inst, ax5x43_init, NULL,                    \
-	                      &ax5x43_##inst##_drvdata,                   \
-	                      &ax5x43_##inst##_config, POST_KERNEL,       \
+	DEVICE_DT_INST_DEFINE(inst, ax5x43_init, NULL,                 \
+	                      &ax5x43_##inst##_drvdata,                \
+	                      &ax5x43_##inst##_config, POST_KERNEL,    \
 	                      CONFIG_AX5X43_INIT_PRIORITY, NULL);
 
 DT_INST_FOREACH_STATUS_OKAY(AX5X43_INIT)
