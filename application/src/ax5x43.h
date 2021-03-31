@@ -18,7 +18,8 @@ extern "C" {
 typedef void (*ax5x43_callback)(const struct device *dev);
 
 struct ax5x43_config {
-	const char *spi_dev_name;
+	/* Master SPI device. */
+	const struct device *spi;
 	struct spi_config spi_cfg;
 	uint32_t clock_freq;
 	struct gpio_dt_spec cs;
@@ -26,8 +27,6 @@ struct ax5x43_config {
 };
 
 struct ax5x43_drv_data {
-	/** Master SPI device */
-	const struct device *spi;
 	struct spi_cs_control spi_cs;
 
 	/* Backling to ease handling of GPIO interrupts. */

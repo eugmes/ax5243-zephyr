@@ -60,7 +60,6 @@ static int ax5x43_read_regs(const struct device *dev, bool force_long,
 	__ASSERT_NO_MSG(data != NULL);
 
 	const struct ax5x43_config *config = dev->config;
-	struct ax5x43_drv_data *drv_data = dev->data;
 	const bool long_access = force_long || (addr > AX5X43_LAST_DYN_REG);
 
 	uint8_t tx_data[2];
@@ -93,8 +92,8 @@ static int ax5x43_read_regs(const struct device *dev, bool force_long,
 		.count = ARRAY_SIZE(rx_buf),
 	};
 
-	int ret = spi_transceive(drv_data->spi, &config->spi_cfg, &tx, &rx);
-	spi_release(drv_data->spi, &config->spi_cfg);
+	int ret = spi_transceive(config->spi, &config->spi_cfg, &tx, &rx);
+	spi_release(config->spi, &config->spi_cfg);
 	if (ret < 0) {
 		return ret;
 	}
@@ -124,7 +123,6 @@ static int ax5x43_write_regs(const struct device *dev, bool force_long,
 	__ASSERT_NO_MSG(data != NULL);
 
 	const struct ax5x43_config *config = dev->config;
-	struct ax5x43_drv_data *drv_data = dev->data;
 	const bool long_access = force_long || (addr > AX5X43_LAST_DYN_REG);
 
 	uint8_t tx_data[2] = { addr | 0x80 };
@@ -157,8 +155,8 @@ static int ax5x43_write_regs(const struct device *dev, bool force_long,
 		.count = ARRAY_SIZE(rx_buf),
 	};
 
-	int ret = spi_transceive(drv_data->spi, &config->spi_cfg, &tx, &rx);
-	spi_release(drv_data->spi, &config->spi_cfg);
+	int ret = spi_transceive(config->spi, &config->spi_cfg, &tx, &rx);
+	spi_release(config->spi, &config->spi_cfg);
 	if (ret < 0) {
 		return ret;
 	}
@@ -278,12 +276,6 @@ static int ax5x43_init(const struct device *dev)
 	drv_data->dev = dev;
 	drv_data->callback = NULL;
 
-	drv_data->spi = device_get_binding(config->spi_dev_name);
-	if (!drv_data->spi) {
-		LOG_ERR("Unable to get SPI device");
-		return -ENODEV;
-	}
-
 	if (config->cs.port) {
 		/* handle SPI CS thru GPIO if it is the case */
 		drv_data->spi_cs.gpio_dev = config->cs.port;
@@ -332,7 +324,7 @@ static int ax5x43_init(const struct device *dev)
 #define AX5X43_INIT(inst)                                               \
 	static struct ax5x43_drv_data ax5x43_##inst##_drvdata = {};     \
 	static const struct ax5x43_config ax5x43_##inst##_config = { \
-		.spi_dev_name = DT_INST_BUS_LABEL(inst), \
+		.spi = DEVICE_DT_GET(DT_INST_BUS(inst)), \
 		.spi_cfg = { \
 			.operation = (SPI_OP_MODE_MASTER | SPI_TRANSFER_MSB | \
 				      SPI_WORD_SET(8) | SPI_LINES_SINGLE | \
