@@ -17,19 +17,12 @@ extern "C" {
 
 typedef void (*ax5x43_callback)(const struct device *dev);
 
-/* FIXME why is this not a standard type??? */
-struct ax5x43_gpio_pin_config {
-	const char *dev;
-	gpio_pin_t pin;
-	gpio_dt_flags_t flags;
-};
-
 struct ax5x43_config {
 	const char *spi_dev_name;
 	struct spi_config spi_cfg;
 	uint32_t clock_freq;
-	struct ax5x43_gpio_pin_config cs;
-	struct ax5x43_gpio_pin_config irq;
+	struct gpio_dt_spec cs;
+	struct gpio_dt_spec irq;
 };
 
 struct ax5x43_drv_data {
@@ -39,8 +32,6 @@ struct ax5x43_drv_data {
 
 	/* Backling to ease handling of GPIO interrupts. */
 	const struct device *dev;
-
-	const struct device *irq_dev;
 
 	struct gpio_callback irq_cb;
 	ax5x43_callback callback;

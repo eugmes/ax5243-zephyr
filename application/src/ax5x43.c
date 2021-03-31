@@ -36,17 +36,15 @@ static void irq_handler(const struct device *port, struct gpio_callback *cb,
 int ax5x43_configure_interrupt(const struct device *dev, bool enable)
 {
 	const struct ax5x43_config *config = dev->config;
-	struct ax5x43_drv_data *drv_data = dev->data;
 
-	if (!drv_data->irq_dev) {
+	if (!config->irq.port) {
 		return -ENOTSUP;
 	}
 
 	gpio_flags_t flags = enable ? (GPIO_INT_ENABLE | GPIO_INT_EDGE_RISING) :
 	                              GPIO_INT_DISABLE;
 
-	return gpio_pin_interrupt_configure(drv_data->irq_dev, config->irq.pin,
-	                                    flags);
+	return gpio_pin_configure_dt(&config->irq, flags);
 }
 
 void ax5x43_set_callback(const struct device *dev, ax5x43_callback callback)
@@ -261,24 +259,15 @@ static int ax5x43_config_oscillator(const struct device *dev)
 	return ret;
 }
 
-#define CONFIGURE_PIN(name, extra_flags)                                         \
-	({                                                                       \
-		if (config->name.dev) {                                          \
-			drv_data->name##_dev =                                   \
-			        device_get_binding(config->name.dev);            \
-			if (!drv_data->name##_dev) {                             \
-				LOG_ERR("Unable to get GPIO device for " #name); \
-				return -ENODEV;                                  \
-			}                                                        \
-			int ret = gpio_pin_configure(                            \
-			        drv_data->name##_dev, config->name.pin,          \
-			        config->name.flags | (extra_flags));             \
-			if (ret < 0) {                                           \
-				return ret;                                      \
-			}                                                        \
-			LOG_DBG(#name " configured on %s:%u",                    \
-			        config->name.dev, config->name.pin);             \
-		}                                                                \
+#define CONFIGURE_PIN(name, extra_flags)                                \
+	({                                                              \
+		if (config->name.port) {                                \
+			int ret = gpio_pin_configure_dt(&config->name,  \
+			                                (extra_flags)); \
+			if (ret < 0) {                                  \
+				return ret;                             \
+			}                                               \
+		}                                                       \
 	})
 
 static int ax5x43_init(const struct device *dev)
@@ -295,29 +284,25 @@ static int ax5x43_init(const struct device *dev)
 		return -ENODEV;
 	}
 
-	if (config->cs.dev) {
+	if (config->cs.port) {
 		/* handle SPI CS thru GPIO if it is the case */
-		drv_data->spi_cs.gpio_dev = device_get_binding(config->cs.dev);
+		drv_data->spi_cs.gpio_dev = config->cs.port;
 		if (!drv_data->spi_cs.gpio_dev) {
 			LOG_ERR("Unable to get GPIO SPI CS device");
 			return -ENODEV;
 		}
 		drv_data->spi_cs.gpio_pin = config->cs.pin;
-		drv_data->spi_cs.gpio_dt_flags = config->cs.flags;
+		drv_data->spi_cs.gpio_dt_flags = config->cs.dt_flags;
 
-		gpio_pin_configure(drv_data->spi_cs.gpio_dev, config->cs.pin,
-		                   config->cs.flags | GPIO_OUTPUT_HIGH);
-
-		LOG_DBG("CS configured on %s:%u", config->cs.dev,
-		        config->cs.flags);
+		gpio_pin_configure_dt(&config->cs, GPIO_OUTPUT_HIGH);
 	}
 
 	CONFIGURE_PIN(irq, GPIO_INPUT);
 
-	if (drv_data->irq_dev) {
+	if (config->irq.port) {
 		gpio_init_callback(&drv_data->irq_cb, &irq_handler,
 		                   BIT(config->irq.pin));
-		gpio_add_callback(drv_data->irq_dev, &drv_data->irq_cb);
+		gpio_add_callback(config->irq.port, &drv_data->irq_cb);
 	}
 
 	int ret = ax5x43_reset(dev);
@@ -337,11 +322,11 @@ static int ax5x43_init(const struct device *dev)
 	return 0;
 }
 
-#define PIN_CONFIG(inst, name)                          \
-	{                                               \
-		.dev = DT_INST_GPIO_LABEL(inst, name),  \
-		.pin = DT_INST_GPIO_PIN(inst, name),    \
-		.flags = DT_INST_GPIO_FLAGS(inst, name) \
+#define DT_INST_SPI_DEV_CS_GPIOS_SPEC(inst)                                 \
+	{                                                                   \
+		.port = DEVICE_DT_GET(DT_INST_SPI_DEV_CS_GPIOS_CTLR(inst)), \
+		.pin = DT_INST_SPI_DEV_CS_GPIOS_PIN(inst),                  \
+		.dt_flags = DT_INST_SPI_DEV_CS_GPIOS_FLAGS(inst),           \
 	}
 
 #define AX5X43_INIT(inst)                                               \
@@ -358,13 +343,9 @@ static int ax5x43_init(const struct device *dev)
 		}, \
 		.clock_freq = DT_INST_PROP(inst, clock_frequency),      \
 		IF_ENABLED(DT_INST_SPI_DEV_HAS_CS_GPIOS(inst),          \
-			(.cs = {                                        \
-				DT_INST_SPI_DEV_CS_GPIOS_LABEL(inst),   \
-				DT_INST_SPI_DEV_CS_GPIOS_PIN(inst),     \
-				DT_INST_SPI_DEV_CS_GPIOS_FLAGS(inst),   \
-			},))                                            \
+			(.cs = DT_INST_SPI_DEV_CS_GPIOS_SPEC(inst),))      \
 		IF_ENABLED(DT_INST_NODE_HAS_PROP(inst, irq_gpios),      \
-			(.irq = PIN_CONFIG(inst, irq_gpios),))          \
+			(.irq = GPIO_DT_SPEC_GET(DT_DRV_INST(inst), irq_gpios),))    \
 	};  \
 	DEVICE_DT_INST_DEFINE(inst, ax5x43_init, device_pm_control_nop, \
 	                      &ax5x43_##inst##_drvdata,                 \
