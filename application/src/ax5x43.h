@@ -17,18 +17,18 @@ extern "C" {
 
 typedef void (*ax5x43_callback)(const struct device *dev);
 
+#define AX5X43_SPI_OPERATION                                       \
+	(SPI_OP_MODE_MASTER | SPI_TRANSFER_MSB | SPI_WORD_SET(8) | \
+	 SPI_LINES_SINGLE | SPI_HOLD_ON_CS | SPI_LOCK_ON)
+
 struct ax5x43_config {
-	/* Master SPI device. */
-	const struct device *spi;
-	struct spi_config spi_cfg;
+	const struct device *bus;
+	struct spi_config bus_cfg;
 	uint32_t clock_freq;
-	struct gpio_dt_spec cs;
 	struct gpio_dt_spec irq;
 };
 
 struct ax5x43_drv_data {
-	struct spi_cs_control spi_cs;
-
 	/* Backling to ease handling of GPIO interrupts. */
 	const struct device *dev;
 
