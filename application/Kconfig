@@ -1,18 +1,15 @@
+menu "Application settings"
+
 config AX5X43_INIT_PRIORITY
 	int "AX5X43 init priority"
 	default 75
 	help
 	  Device initialization priority
 
-config RADIO_IQ_CALIBRATION
-	bool "Enable radio IQ calibration"
-	default y
-
-config APP_SIMULATE
-	bool "Simulate the receiver data"
-
 module = AX5X43
 module-str = ax5x43
 source "subsys/logging/Kconfig.template.log_config"
+
+endmenu
 
 source "Kconfig.zephyr"
