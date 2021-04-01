@@ -11,13 +11,12 @@
 #include <init.h>
 #include <drivers/spi.h>
 #include <sys/byteorder.h>
+#include <logging/log.h>
 
 #include "ax5x43.h"
 #include "ax5x43_regs.h"
 
-#define LOG_LEVEL CONFIG_AX5X43_LOG_LEVEL
-#include <logging/log.h>
-LOG_MODULE_REGISTER(ax5x43);
+LOG_MODULE_REGISTER(ax5x43, CONFIG_AX5X43_LOG_LEVEL);
 
 static void irq_handler(const struct device *port, struct gpio_callback *cb,
                         gpio_port_pins_t pins)
