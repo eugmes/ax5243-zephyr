@@ -21,10 +21,16 @@ typedef void (*ax5x43_callback)(const struct device *dev);
 	(SPI_OP_MODE_MASTER | SPI_TRANSFER_MSB | SPI_WORD_SET(8) | \
 	 SPI_LINES_SINGLE | SPI_HOLD_ON_CS | SPI_LOCK_ON)
 
+enum ax5x43_clock_source {
+	AX5X43_CRYSTAL,
+	AX5X43_OSCILLATOR,
+};
+
 struct ax5x43_config {
 	const struct device *bus;
 	struct spi_config bus_cfg;
 	uint32_t clock_freq;
+	uint8_t clock_source;
 	struct gpio_dt_spec irq;
 };
 

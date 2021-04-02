@@ -222,16 +222,55 @@ static int ax5x43_reset(const struct device *dev)
 	return 0;
 }
 
-static int ax5x43_config_oscillator(const struct device *dev)
+/**
+ * Initialize the performance registers.
+ */
+static int init_perf_regs(const struct device *dev)
 {
-	/* Configuration for a clipped sinewave oscillator. */
+	const struct ax5x43_config *config = dev->config;
 	int ret;
 
-	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_XTALOSC, 0x04));
-	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_XTALAMP, 0x00));
-	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_XTALCAP, 0x00));
+	CHECK_RET(ax5x43_write_u8(dev, 0xF00, 0x0F));
+	CHECK_RET(ax5x43_write_u8(dev, 0xF0C, 0x00));
+	CHECK_RET(ax5x43_write_u8(dev, 0xF0D, 0x02));
 
-	return ret;
+	CHECK_RET(ax5x43_write_u8(
+	        dev, AX5X43_REG_XTALOSC,
+	        config->clock_source == AX5X43_OSCILLATOR ?
+	                0x04 :
+	                (config->clock_freq > 43000000 ? 0x0D : 0x03)));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_XTALAMP, 0x00));
+	// CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_XTALCAP, 0x00));
+
+	CHECK_RET(ax5x43_write_u8(dev, 0xF1C, 0x07));
+	CHECK_RET(ax5x43_write_u8(dev, 0xF21, 0x5C));
+	CHECK_RET(ax5x43_write_u8(dev, 0xF22, 0x53));
+	CHECK_RET(ax5x43_write_u8(dev, 0xF23, 0x76));
+	CHECK_RET(ax5x43_write_u8(dev, 0xF26, 0x92));
+	CHECK_RET(ax5x43_write_u8(dev, 0xF30, 0x3F));
+	CHECK_RET(ax5x43_write_u8(dev, 0xF31, 0xF0));
+	CHECK_RET(ax5x43_write_u8(dev, 0xF32, 0x3F));
+	CHECK_RET(ax5x43_write_u8(dev, 0xF33, 0xF0));
+	CHECK_RET(ax5x43_write_u8(dev, 0xF34, 0x08)); // Set to 0x28 if RFDIV is set, or to 0x08 otherwise
+	CHECK_RET(ax5x43_write_u8(dev, 0xF35, config->clock_freq < 24800000 ? 0x10 : 0x11)); // FIXME check XTALDIV
+	CHECK_RET(ax5x43_write_u8(dev, 0xF44, 0x24));
+	CHECK_RET(ax5x43_write_u8(dev, 0xF0D, 0x00)); // Set to 0x06 for "Raw, Soft Bits" framing
+
+	return 0;
+}
+
+/**
+ * Initialize registers controlling GPIO pins.
+ */
+static int init_pin_func_regs(const struct device *dev)
+{
+	int ret;
+
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PINFUNCDCLK, 0));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PINFUNCDATA, 0));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PINFUNCTCXO_EN, 0));
+
+	return 0;
 }
 
 static int ax5x43_init(const struct device *dev)
@@ -259,9 +298,15 @@ static int ax5x43_init(const struct device *dev)
 		return ret;
 	}
 
-	ret = ax5x43_config_oscillator(dev);
+	ret = init_perf_regs(dev);
 	if (ret < 0) {
-		LOG_ERR("Oscillator configuration failed");
+		LOG_ERR("Performance registers configuration failed");
+		return ret;
+	}
+
+	ret = init_pin_func_regs(dev);
+	if (ret < 0) {
+		LOG_ERR("Pin function registers configuration failed");
 		return ret;
 	}
 
@@ -276,6 +321,7 @@ static int ax5x43_init(const struct device *dev)
 		.bus = DEVICE_DT_GET(DT_INST_BUS(inst)),                      \
 		.bus_cfg = SPI_CONFIG_DT_INST(inst, AX5X43_SPI_OPERATION, 0), \
 		.clock_freq = DT_INST_PROP(inst, clock_frequency),            \
+		.clock_source = DT_ENUM_IDX(DT_DRV_INST(inst), clock_source), \
 		.irq = GPIO_DT_SPEC_GET(DT_DRV_INST(inst), irq_gpios),        \
 	};                                                                    \
 	DEVICE_DT_INST_DEFINE(inst, ax5x43_init, device_pm_control_nop,       \
