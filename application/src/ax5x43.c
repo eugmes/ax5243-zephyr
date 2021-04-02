@@ -18,6 +18,14 @@
 
 LOG_MODULE_REGISTER(ax5x43, CONFIG_AX5X43_LOG_LEVEL);
 
+#define CHECK_RET(call)             \
+	({                          \
+		ret = (call);       \
+		if (ret < 0) {      \
+			return ret; \
+		}                   \
+	})
+
 static void irq_handler(const struct device *port, struct gpio_callback *cb,
                         gpio_port_pins_t pins)
 {
@@ -184,52 +192,28 @@ static int ax5x43_reset(const struct device *dev)
 
 	/* Ensure that the chip is not in the deep sleep mode. */
 	do {
-		ret = ax5x43_read_u8(dev, AX5X43_REG_REVISION, &reg);
-		if (ret < 0) {
-			return ret;
-		}
+		CHECK_RET(ax5x43_read_u8(dev, AX5X43_REG_REVISION, &reg));
 	} while ((ret & AX5X43_STATUS_POWERED) == 0);
 
 	__ASSERT(reg == AX5X43_REVISION, "Invalid chip revision %02x", reg);
 
 	/* Reset the chip */
-	ret = ax5x43_write_u8(dev, AX5X43_REG_PWRMODE,
-	                      AX5X43_PWRMODE_RST | AX5X43_PWRMODE_POWERDOWN);
-	if (ret < 0) {
-		LOG_ERR("Failed to assert RST");
-		return ret;
-	}
-	ret = ax5x43_write_u8(dev, AX5X43_REG_PWRMODE,
-	                      AX5X43_PWRMODE_POWERDOWN);
-	if (ret < 0) {
-		LOG_ERR("Failed to clear RST");
-		return ret;
-	}
+	CHECK_RET(
+	        ax5x43_write_u8(dev, AX5X43_REG_PWRMODE,
+	                        AX5X43_PWRMODE_RST | AX5X43_PWRMODE_POWERDOWN));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PWRMODE,
+	                          AX5X43_PWRMODE_POWERDOWN));
 
 	/* Try accessing scratch register to ensure that chip is working. */
-	ret = ax5x43_read_u8(dev, AX5X43_REG_SCRATCH, &reg);
-	if (ret < 0) {
-		LOG_ERR("Failed to read SCRATCH register");
-		return ret;
-	}
+	CHECK_RET(ax5x43_read_u8(dev, AX5X43_REG_SCRATCH, &reg));
 
 	if (reg != AX5X43_SCRATCH_VALUE) {
 		LOG_ERR("Invalid SCRATCH value: %02x", reg);
 		return -EIO;
 	}
 
-	ret = ax5x43_write_u8(dev, AX5X43_REG_SCRATCH, 42);
-	if (ret < 0) {
-		LOG_ERR("Failed to update SCRATCH register");
-		return ret;
-	}
-
-	ret = ax5x43_read_u8(dev, AX5X43_REG_SCRATCH, &reg);
-	if (ret < 0) {
-		LOG_ERR("Failed to read back SCRATCH register");
-		return ret;
-	}
-
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_SCRATCH, 42));
+	CHECK_RET(ax5x43_read_u8(dev, AX5X43_REG_SCRATCH, &reg));
 	if (reg != 42) {
 		LOG_ERR("Invalid SCRATCH read back: %02x", reg);
 		return -EIO;
@@ -241,17 +225,11 @@ static int ax5x43_reset(const struct device *dev)
 static int ax5x43_config_oscillator(const struct device *dev)
 {
 	/* Configuration for a clipped sinewave oscillator. */
-	int ret = ax5x43_write_u8(dev, AX5X43_REG_XTALOSC, 0x04);
-	if (ret < 0) {
-		return ret;
-	}
+	int ret;
 
-	ret = ax5x43_write_u8(dev, AX5X43_REG_XTALAMP, 0x00);
-	if (ret < 0) {
-		return ret;
-	}
-
-	ret = ax5x43_write_u8(dev, AX5X43_REG_XTALCAP, 0x00);
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_XTALOSC, 0x04));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_XTALAMP, 0x00));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_XTALCAP, 0x00));
 
 	return ret;
 }
@@ -300,19 +278,19 @@ static int ax5x43_init(const struct device *dev)
 	return 0;
 }
 
-#define AX5X43_INIT(inst)                                                      \
-	static struct ax5x43_drv_data ax5x43_##inst##_drvdata = {};            \
-	static const struct ax5x43_config ax5x43_##inst##_config = {           \
-		.bus = DEVICE_DT_GET(DT_INST_BUS(inst)),                       \
-		.bus_cfg = SPI_CONFIG_DT_INST(inst, AX5X43_SPI_OPERATION, 0),  \
-		.clock_freq = DT_INST_PROP(inst, clock_frequency),             \
-		IF_ENABLED(DT_INST_NODE_HAS_PROP(inst, irq_gpios),             \
-		           (.irq = GPIO_DT_SPEC_GET(DT_DRV_INST(inst),         \
-		                                            irq_gpios), ))     \
-	};                                                                     \
-	DEVICE_DT_INST_DEFINE(inst, ax5x43_init, device_pm_control_nop,        \
-	                      &ax5x43_##inst##_drvdata,                        \
-	                      &ax5x43_##inst##_config, POST_KERNEL,            \
+#define AX5X43_INIT(inst)                                                     \
+	static struct ax5x43_drv_data ax5x43_##inst##_drvdata = {};           \
+	static const struct ax5x43_config ax5x43_##inst##_config = {          \
+		.bus = DEVICE_DT_GET(DT_INST_BUS(inst)),                      \
+		.bus_cfg = SPI_CONFIG_DT_INST(inst, AX5X43_SPI_OPERATION, 0), \
+		.clock_freq = DT_INST_PROP(inst, clock_frequency),            \
+		IF_ENABLED(DT_INST_NODE_HAS_PROP(inst, irq_gpios),            \
+		           (.irq = GPIO_DT_SPEC_GET(DT_DRV_INST(inst),        \
+		                                    irq_gpios), ))            \
+	};                                                                    \
+	DEVICE_DT_INST_DEFINE(inst, ax5x43_init, device_pm_control_nop,       \
+	                      &ax5x43_##inst##_drvdata,                       \
+	                      &ax5x43_##inst##_config, POST_KERNEL,           \
 	                      CONFIG_AX5X43_INIT_PRIORITY, NULL);
 
 DT_INST_FOREACH_STATUS_OKAY(AX5X43_INIT)
