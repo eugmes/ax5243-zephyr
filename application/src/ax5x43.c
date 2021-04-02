@@ -234,34 +234,26 @@ static int ax5x43_config_oscillator(const struct device *dev)
 	return ret;
 }
 
-#define CONFIGURE_PIN(name, extra_flags)                                \
-	({                                                              \
-		if (config->name.port) {                                \
-			int ret = gpio_pin_configure_dt(&config->name,  \
-			                                (extra_flags)); \
-			if (ret < 0) {                                  \
-				return ret;                             \
-			}                                               \
-		}                                                       \
-	})
-
 static int ax5x43_init(const struct device *dev)
 {
 	const struct ax5x43_config *config = dev->config;
 	struct ax5x43_drv_data *drv_data = dev->data;
+	int ret;
 
 	drv_data->dev = dev;
 	drv_data->callback = NULL;
 
-	CONFIGURE_PIN(irq, GPIO_INPUT);
-
-	if (config->irq.port) {
-		gpio_init_callback(&drv_data->irq_cb, &irq_handler,
-		                   BIT(config->irq.pin));
-		gpio_add_callback(config->irq.port, &drv_data->irq_cb);
+	ret = gpio_pin_configure_dt(&config->irq, GPIO_INPUT);
+	if (ret < 0) {
+		LOG_ERR("Failed to configure IRQ GPIO");
+		return ret;
 	}
 
-	int ret = ax5x43_reset(dev);
+	gpio_init_callback(&drv_data->irq_cb, &irq_handler,
+	                   BIT(config->irq.pin));
+	gpio_add_callback(config->irq.port, &drv_data->irq_cb);
+
+	ret = ax5x43_reset(dev);
 	if (ret < 0) {
 		LOG_ERR("Reset failed");
 		return ret;
@@ -284,9 +276,7 @@ static int ax5x43_init(const struct device *dev)
 		.bus = DEVICE_DT_GET(DT_INST_BUS(inst)),                      \
 		.bus_cfg = SPI_CONFIG_DT_INST(inst, AX5X43_SPI_OPERATION, 0), \
 		.clock_freq = DT_INST_PROP(inst, clock_frequency),            \
-		IF_ENABLED(DT_INST_NODE_HAS_PROP(inst, irq_gpios),            \
-		           (.irq = GPIO_DT_SPEC_GET(DT_DRV_INST(inst),        \
-		                                    irq_gpios), ))            \
+		.irq = GPIO_DT_SPEC_GET(DT_DRV_INST(inst), irq_gpios),        \
 	};                                                                    \
 	DEVICE_DT_INST_DEFINE(inst, ax5x43_init, device_pm_control_nop,       \
 	                      &ax5x43_##inst##_drvdata,                       \
