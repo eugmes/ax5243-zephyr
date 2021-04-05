@@ -333,6 +333,12 @@ static uint32_t div24(uint32_t a, uint32_t b)
 	return tmp / b;
 }
 
+static uint32_t div20(uint32_t a, uint32_t b)
+{
+	uint64_t tmp = ((uint64_t)a) << 20;
+	return tmp / b;
+}
+
 static int init_common_regs(const struct device *dev)
 {
 	const struct ax5x43_config *config = dev->config;
@@ -385,9 +391,9 @@ static int init_common_regs(const struct device *dev)
 	uint32_t f_coeff_inv = 4; /* FILTERIDX = 0b11 (default) */
 
 	// TODO: rounding
-	uint8_t decimation =
+	uint32_t decimation =
 	        config->clock_freq /
-	        ((1UL << 4) * config->xtaldiv * f_coeff_inv * bandwidth);
+	        ((1UL << 4) * (uint32_t)config->xtaldiv * f_coeff_inv * bandwidth);
 	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_DECIMATION, decimation));
 
 	// TODO: rounding
@@ -398,7 +404,7 @@ static int init_common_regs(const struct device *dev)
 
 	uint32_t f_if = bandwidth / 2;
 	// TODO: Rounding
-	uint16_t iffreq = (f_if << 20) * config->xtaldiv / config->clock_freq;
+	uint16_t iffreq = div20(f_if * config->xtaldiv, config->clock_freq);
 	CHECK_RET(ax5x43_write_u16(dev, AX5X43_REG_IFFREQ, iffreq));
 
 	// FIXME: hardcoded for now
@@ -422,7 +428,7 @@ static int init_common_regs(const struct device *dev)
 	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PKTMAXLEN, 0xFF));
 	// TODO enable multichunk packets
 	// CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PKTACCEPTFLAGS,
-	//                           AX5X43_ACCPT_CRCF));
+        //                           AX5X43_ACCPT_CRCF));
 	// CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PKTSTOREFLAGS,
 	//                           AX5X43_ST_RSSI));
 
@@ -485,7 +491,7 @@ static int ax5x43_init(const struct device *dev)
 		.bus_cfg = SPI_CONFIG_DT_INST(inst, AX5X43_SPI_OPERATION, 0), \
 		.irq = GPIO_DT_SPEC_GET(DT_DRV_INST(inst), irq_gpios),        \
 		.clock_freq = DT_INST_PROP(inst, clock_frequency),            \
-		.xtaldiv = (DT_INST_PROP(inst, clock_frequency) > 28400000) ? \
+		.xtaldiv = (DT_INST_PROP(inst, clock_frequency) > 24800000) ? \
 		                   2 :                                        \
 		                   1,                                         \
 		.carrier_freq = DT_INST_PROP(inst, carrier_frequency),        \
