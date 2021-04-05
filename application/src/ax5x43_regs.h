@@ -25,6 +25,10 @@
 #define AX5X43_STAT_LPOSC_INT_PEND  BIT(2)
 #define AX5X43_STAT_GPADC_INT_PEND  BIT(1)
 
+/* FIFO Chunk Types */
+#define AX5X43_CHUNK_RSSI          0x31
+#define AX5X43_CHUNK_DATA          0xE1
+
 /** Last register that can be accessed using short address. */
 #define AX5X43_LAST_DYN_REG        0x06F
 
@@ -260,5 +264,38 @@
 #define AX5X43_PWRMODE_XOEN          BIT(5)
 #define AX5X43_PWRMODE_REFEN         BIT(6)
 #define AX5X43_PWRMODE_RST           BIT(7)
+
+#define AX5X43_PLLRANGING_RNGSTART   BIT(4)
+#define AX5X43_PLLRANGING_RNGERR     BIT(5)
+#define AX5X43_PLLRANGING_PLLLOCK    BIT(6)
+#define AX5X43_PLLRANGING_STICKYLOCK BIT(7)
+
+#define AX5X43_XTALSTATUS_XTALRUN    BIT(0)
+
+#define AX5X43_MODULATION_MSK        0x7
+
+#define AX5X43_ENCODING_INV          BIT(0)
+#define AX4X43_ENCODING_DIFF         BIT(1)
+#define AX4X43_ENCODING_SCRAM        BIT(2)
+#define AX4X43_ENCODING_MANCH        BIT(3)
+#define AX4X43_ENCODING_NOSYNC       BIT(4)
+
+#define AX5X43_FRMMODE_HDLC          (0x2 << 1)
+#define AX5X43_CRCMODE_CCITT         (0x1 << 4)
+
+#define AX5X43_ACCPT_RESIDUE         BIT(0)
+#define AX5X43_ACCPT_ABRT            BIT(1)
+#define AX5X43_ACCPT_CRCF            BIT(2)
+#define AX5X43_ACCPT_ADDRF           BIT(3)
+#define AX5X43_ACCPT_SZF             BIT(4)
+#define AX5X43_ACCPT_LRGP            BIT(5)
+
+#define AX5X43_ST_TIMER              BIT(0)
+#define AX5X43_ST_FOFFS              BIT(1)
+#define AX5X43_ST_RFOFFS             BIT(2)
+#define AX5X43_ST_DR                 BIT(3)
+#define AX5X43_ST_RSSI               BIT(4)
+#define AX5X43_ST_CRCB               BIT(5)
+#define AX5X43_ST_ANT_RSSI           BIT(6)
 
 #endif

@@ -10,7 +10,9 @@
 		reg = <0>;
 
 		irq-gpios = <&gpioa 8 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
-		clock-frequency = <24000000>;
+		clock-frequency = <26000000>;
+		carrier-frequency = <161975000>; // 162025000
+		bitrate = <9600>;
 		clock-source = "oscillator";
 	};
 };
