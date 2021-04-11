@@ -1,0 +1,12 @@
+&spi1 {
+	status = "okay";
+	pinctrl-0 = <&spi1_sck_pb3 &spi1_miso_pb4 &spi1_mosi_pb5>;
+	cs-gpios = <&gpioa 11 GPIO_ACTIVE_LOW>;
+
+	ax5243: ax5243@0 {
+		reg = <0>;
+		irq-gpios = <&gpioa 8 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
+	};
+};
+
+#include "ax5243_nano_common.dtsi"
