@@ -30,6 +30,7 @@ int main(void)
 		return 1;
 	}
 
+#if 1
 	int ret = ax5x43_start_rx(dev);
 	if (ret < 0) {
 		printk("Failed to start RX mode: %d\n", ret);
@@ -52,4 +53,27 @@ int main(void)
 
 		k_sleep(K_MSEC(1));
 	}
+#else
+	int ret = ax5x43_start_tx(dev);
+	if (ret < 0) {
+		printk("Failed to start TX mode: %d\n", ret);
+		return 2;
+	}
+
+	k_sleep(K_MSEC(1000));
+
+	while (1) {
+		const uint8_t data[] = {0, 1, 2, 3, 4};
+
+		ret = ax5x43_send_packet(dev, data, sizeof(data));
+		if (ret < 0) {
+			printk("Failed to send packet: %d\n", ret);
+			return 3;
+		}
+
+		printk(".");
+
+		k_sleep(K_MSEC(1000));
+	}
+#endif
 }

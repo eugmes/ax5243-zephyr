@@ -41,7 +41,9 @@ struct ax5x43_drv_data {
 };
 
 int ax5x43_start_rx(const struct device *dev);
+int ax5x43_start_tx(const struct device *dev);
 int ax5x43_read_fifo(const struct device *dev, uint8_t *buf);
+int ax5x43_send_packet(const struct device *dev, const uint8_t *buf, size_t size);
 
 #ifdef __cplusplus
 }

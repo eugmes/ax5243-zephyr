@@ -181,6 +181,11 @@ int ax5x43_start_rx(const struct device *dev)
 	return set_pwrmode(dev, AX5X43_PWRMODE_FULLRX);
 }
 
+int ax5x43_start_tx(const struct device *dev)
+{
+	return set_pwrmode(dev, AX5X43_PWRMODE_FULLTX);
+}
+
 int ax5x43_read_fifo(const struct device *dev, uint8_t *buf)
 {
 	int ret;
@@ -217,6 +222,31 @@ int ax5x43_read_fifo(const struct device *dev, uint8_t *buf)
 	p += data_size;
 
 	return p - buf;
+}
+
+int ax5x43_send_packet(const struct device *dev, const uint8_t *buf, size_t size)
+{
+	int ret;
+	// TODO add FIFO space checks
+
+	const uint8_t headers[] = {
+		/* Preamble */
+		AX5X43_CHUNK_REPEATDATA,
+		AX5X43_REPEATDATA_NOCRC | AX5X43_REPEATDATA_UNENC,
+		3,
+		0x55,
+		/* Packet data header */
+		AX5X43_CHUNK_DATA,
+		size + 1,
+		AX5X43_DATA_PKTSTART | AX5X43_DATA_PKTEND,
+	};
+
+	CHECK_RET(ax5x43_write_regs(dev, false, AX5X43_REG_FIFODATA, sizeof(headers), headers));
+	CHECK_RET(ax5x43_write_regs(dev, false, AX5X43_REG_FIFODATA, size, buf));
+
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_FIFOSTAT, AX5X43_FIFOCMD_COMMIT));
+
+	return 0;
 }
 
 static int ax5x43_reset(const struct device *dev)
@@ -386,6 +416,9 @@ static int init_common_regs(const struct device *dev)
 	uint32_t fskdev = div24(config->bitrate / 4, config->clock_freq);
 	CHECK_RET(ax5x43_write_u24(dev, AX5X43_REG_FSKDEV, fskdev));
 
+	// Lower the TX power for testing.
+	CHECK_RET(ax5x43_write_u16(dev, AX5X43_REG_TXPWRCOEFFB, 0x0));
+
 	/* Receiver parameters. */
 	uint32_t bandwidth = config->bitrate + config->bitrate / 2;
 	uint32_t f_coeff_inv = 4; /* FILTERIDX = 0b11 (default) */
@@ -413,10 +446,10 @@ static int init_common_regs(const struct device *dev)
 	CHECK_RET(ax5x43_write_u24(dev, AX5X43_REG_MAXDROFFSET, 0));
 
 	uint16_t rx = AX5X43_RX_PARAM_SET0;
-	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_AGCGAIN, 0x74));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_AGCGAIN, 0x96));
 	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_AGCTARGET, 0x89));
-	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_TIMEGAIN, 0x98));
-	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_DRGAIN, 0x94));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_TIMEGAIN, 0xC8));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_DRGAIN, 0xC4));
 	CHECK_RET(ax5x43_write_u16(dev, rx + AX5X43_RX_FREQDEV, 0));
 
 	/* Encoding and framing */

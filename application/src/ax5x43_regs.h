@@ -26,8 +26,32 @@
 #define AX5X43_STAT_GPADC_INT_PEND  BIT(1)
 
 /* FIFO Chunk Types */
+#define AX5X43_CHUNK_NOP           0x00
 #define AX5X43_CHUNK_RSSI          0x31
+#define AX5X43_CHUNK_TXCTRL        0x3C
+#define AX5X43_CHUNK_FREQOFFS      0x52
+#define AX5X43_CHUNK_ANTRSSI2      0x55
+#define AX5X43_CHUNK_REPEATDATA    0x62
+#define AX5X43_CHUNK_TIMER         0x70
+#define AX5X43_CHUNK_RFFREQOFFS    0x73
+#define AX5X43_CHUNK_DATARATE      0x74
+#define AX5X43_CHUNK_ANTRSSI3      0x75
 #define AX5X43_CHUNK_DATA          0xE1
+#define AX5X43_CHUNK_TXPWR         0xFD
+
+#define AX5X43_REPEATDATA_PKTSTART BIT(0)
+#define AX5X43_REPEATDATA_PKTEND   BIT(1)
+#define AX5X43_REPEATDATA_RESIDUE  BIT(2)
+#define AX5X43_REPEATDATA_NOCRC    BIT(3)
+#define AX5X43_REPEATDATA_RAW      BIT(4)
+#define AX5X43_REPEATDATA_UNENC    BIT(5)
+
+#define AX5X43_DATA_PKTSTART       BIT(0)
+#define AX5X43_DATA_PKTEND         BIT(1)
+#define AX5X43_DATA_RESIDUE        BIT(2)
+#define AX5X43_DATA_NOCRC          BIT(3)
+#define AX5X43_DATA_RAW            BIT(4)
+#define AX5X43_DATA_UNENC          BIT(5)
 
 /** Last register that can be accessed using short address. */
 #define AX5X43_LAST_DYN_REG        0x06F
@@ -282,6 +306,7 @@
 
 #define AX5X43_FRMMODE_HDLC          (0x2 << 1)
 #define AX5X43_CRCMODE_CCITT         (0x1 << 4)
+#define AX5X43_CRCMODE_CRC16         (0x2 << 4)
 
 #define AX5X43_ACCPT_RESIDUE         BIT(0)
 #define AX5X43_ACCPT_ABRT            BIT(1)
@@ -297,5 +322,8 @@
 #define AX5X43_ST_RSSI               BIT(4)
 #define AX5X43_ST_CRCB               BIT(5)
 #define AX5X43_ST_ANT_RSSI           BIT(6)
+
+#define AX5X43_FIFOCMD_NOP           0x00
+#define AX5X43_FIFOCMD_COMMIT        0x04
 
 #endif
