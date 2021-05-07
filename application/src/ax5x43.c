@@ -224,7 +224,8 @@ int ax5x43_read_fifo(const struct device *dev, uint8_t *buf)
 	return p - buf;
 }
 
-int ax5x43_send_packet(const struct device *dev, const uint8_t *buf, size_t size)
+int ax5x43_send_packet(const struct device *dev, const uint8_t *buf,
+                       size_t size)
 {
 	int ret;
 	// TODO add FIFO space checks
@@ -241,10 +242,13 @@ int ax5x43_send_packet(const struct device *dev, const uint8_t *buf, size_t size
 		AX5X43_DATA_PKTSTART | AX5X43_DATA_PKTEND,
 	};
 
-	CHECK_RET(ax5x43_write_regs(dev, false, AX5X43_REG_FIFODATA, sizeof(headers), headers));
-	CHECK_RET(ax5x43_write_regs(dev, false, AX5X43_REG_FIFODATA, size, buf));
+	CHECK_RET(ax5x43_write_regs(dev, false, AX5X43_REG_FIFODATA,
+	                            sizeof(headers), headers));
+	CHECK_RET(
+	        ax5x43_write_regs(dev, false, AX5X43_REG_FIFODATA, size, buf));
 
-	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_FIFOSTAT, AX5X43_FIFOCMD_COMMIT));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_FIFOSTAT,
+	                          AX5X43_FIFOCMD_COMMIT));
 
 	return 0;
 }
@@ -296,8 +300,7 @@ static int init_perf_regs(const struct device *dev)
 	//CHECK_RET(ax5x43_write_u8(dev, 0xF0C, 0x00));
 	CHECK_RET(ax5x43_write_u8(dev, 0xF0D, 0x03));
 
-	CHECK_RET(ax5x43_write_u8(
-	        dev, AX5X43_REG_XTALOSC, 0x04));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_XTALOSC, 0x04));
 	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_XTALAMP, 0x00));
 	// TODO configure capacitors for XTAL
 	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_XTALCAP, 0x00));
@@ -402,8 +405,7 @@ static int init_common_regs(const struct device *dev)
 	}
 
 	/* Transmitter parameters. */
-	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_MODULATION,
-	                          0x08));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_MODULATION, 0x08));
 	uint32_t txrate = div24(config->bitrate, config->clock_freq);
 	CHECK_RET(ax5x43_write_u24(dev, AX5X43_REG_TXRATE, txrate));
 	uint32_t fskdev = div24(config->bitrate / 4, config->clock_freq);
@@ -486,9 +488,10 @@ static int init_common_regs(const struct device *dev)
 	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PKTMAXLEN, 0xFF));
 	// TODO enable multichunk packets
 	// CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PKTACCEPTFLAGS,
-        //                           AX5X43_ACCPT_CRCF));
+	//                           AX5X43_ACCPT_CRCF));
 	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PKTSTOREFLAGS,
-	                          AX5X43_ST_RSSI | AX5X43_ST_FOFFS | AX5X43_ST_RFOFFS));
+	                          AX5X43_ST_RSSI | AX5X43_ST_FOFFS |
+	                                  AX5X43_ST_RFOFFS));
 
 	// TODO make chunk size configurable
 	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PKTCHUNKSIZE, 0xD));
