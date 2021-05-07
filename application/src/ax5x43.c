@@ -556,7 +556,7 @@ static int ax5x43_init(const struct device *dev)
 		.clock_source = DT_ENUM_IDX(DT_DRV_INST(inst), clock_source), \
 		.bitrate = DT_INST_PROP(inst, bitrate),                       \
 	};                                                                    \
-	DEVICE_DT_INST_DEFINE(inst, ax5x43_init, device_pm_control_nop,       \
+	DEVICE_DT_INST_DEFINE(inst, ax5x43_init, NULL,                        \
 	                      &ax5x43_##inst##_drvdata,                       \
 	                      &ax5x43_##inst##_config, POST_KERNEL,           \
 	                      CONFIG_AX5X43_INIT_PRIORITY, NULL);
