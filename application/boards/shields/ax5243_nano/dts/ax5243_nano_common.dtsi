@@ -2,7 +2,6 @@
 	compatible = "onnn,ax5x43";
 	label = "AX5243";
 	spi-max-frequency = <10000000>;
-	reg = <0>;
 
 	clock-frequency = <26000000>;
 	carrier-frequency = <161975000>; // 162025000

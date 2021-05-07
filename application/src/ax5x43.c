@@ -290,38 +290,34 @@ static int ax5x43_reset(const struct device *dev)
  */
 static int init_perf_regs(const struct device *dev)
 {
-	const struct ax5x43_config *config = dev->config;
 	int ret;
 
 	CHECK_RET(ax5x43_write_u8(dev, 0xF00, 0x0F));
-	CHECK_RET(ax5x43_write_u8(dev, 0xF0C, 0x00));
-	CHECK_RET(ax5x43_write_u8(dev, 0xF0D, 0x02));
+	//CHECK_RET(ax5x43_write_u8(dev, 0xF0C, 0x00));
+	CHECK_RET(ax5x43_write_u8(dev, 0xF0D, 0x03));
 
 	CHECK_RET(ax5x43_write_u8(
-	        dev, AX5X43_REG_XTALOSC,
-	        config->clock_source == AX5X43_OSCILLATOR ?
-	                0x04 :
-	                (config->clock_freq > 43000000 ? 0x0D : 0x03)));
+	        dev, AX5X43_REG_XTALOSC, 0x04));
 	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_XTALAMP, 0x00));
 	// TODO configure capacitors for XTAL
-	// CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_XTALCAP, 0x00));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_XTALCAP, 0x00));
 
+	CHECK_RET(ax5x43_write_u8(dev, 0xF18, 0x06));
 	CHECK_RET(ax5x43_write_u8(dev, 0xF1C, 0x07));
-	CHECK_RET(ax5x43_write_u8(dev, 0xF21, 0x5C));
-	CHECK_RET(ax5x43_write_u8(dev, 0xF22, 0x53));
-	CHECK_RET(ax5x43_write_u8(dev, 0xF23, 0x76));
-	CHECK_RET(ax5x43_write_u8(dev, 0xF26, 0x92));
-	CHECK_RET(ax5x43_write_u8(dev, 0xF30, 0x3F));
-	CHECK_RET(ax5x43_write_u8(dev, 0xF31, 0xF0));
-	CHECK_RET(ax5x43_write_u8(dev, 0xF32, 0x3F));
-	CHECK_RET(ax5x43_write_u8(dev, 0xF33, 0xF0));
+	CHECK_RET(ax5x43_write_u8(dev, 0xF21, 0x68));
+	CHECK_RET(ax5x43_write_u8(dev, 0xF22, 0xFF));
+	CHECK_RET(ax5x43_write_u8(dev, 0xF23, 0x84));
+	CHECK_RET(ax5x43_write_u8(dev, 0xF26, 0x98));
+	//CHECK_RET(ax5x43_write_u8(dev, 0xF30, 0x3F));
+	//CHECK_RET(ax5x43_write_u8(dev, 0xF31, 0xF0));
+	//CHECK_RET(ax5x43_write_u8(dev, 0xF32, 0x3F));
+	//CHECK_RET(ax5x43_write_u8(dev, 0xF33, 0xF0));
 	// Set to 0x28 if RFDIV is set, or to 0x08 otherwise
 	CHECK_RET(ax5x43_write_u8(dev, 0xF34, 0x08));
-	CHECK_RET(ax5x43_write_u8(dev, 0xF35,
-	                          config->xtaldiv == 1 ? 0x10 : 0x11));
-	CHECK_RET(ax5x43_write_u8(dev, 0xF44, 0x24));
+	CHECK_RET(ax5x43_write_u8(dev, 0xF35, 0x11));
+	CHECK_RET(ax5x43_write_u8(dev, 0xF44, 0x25));
 	// Set to 0x06 for "Raw, Soft Bits" framing
-	CHECK_RET(ax5x43_write_u8(dev, 0xF0D, 0x00));
+	// CHECK_RET(ax5x43_write_u8(dev, 0xF0D, 0x00));
 
 	return 0;
 }
@@ -363,12 +359,6 @@ static uint32_t div24(uint32_t a, uint32_t b)
 	return tmp / b;
 }
 
-static uint32_t div20(uint32_t a, uint32_t b)
-{
-	uint64_t tmp = ((uint64_t)a) << 20;
-	return tmp / b;
-}
-
 static int init_common_regs(const struct device *dev)
 {
 	const struct ax5x43_config *config = dev->config;
@@ -382,6 +372,9 @@ static int init_common_regs(const struct device *dev)
 	CHECK_RET(ax5x43_write_u32(dev, AX5X43_REG_FREQA, freqa));
 
 	// TODO: enable external PLL filter cap
+
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PLLLOOP, 0x0A));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PLLCPI, 0x10));
 
 	/* Configure the external inductor for the VCO */
 	reg = BIT(4) | BIT(5);
@@ -410,7 +403,7 @@ static int init_common_regs(const struct device *dev)
 
 	/* Transmitter parameters. */
 	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_MODULATION,
-	                          AX5X43_MODULATION_MSK));
+	                          0x08));
 	uint32_t txrate = div24(config->bitrate, config->clock_freq);
 	CHECK_RET(ax5x43_write_u24(dev, AX5X43_REG_TXRATE, txrate));
 	uint32_t fskdev = div24(config->bitrate / 4, config->clock_freq);
@@ -420,37 +413,69 @@ static int init_common_regs(const struct device *dev)
 	CHECK_RET(ax5x43_write_u16(dev, AX5X43_REG_TXPWRCOEFFB, 0x0));
 
 	/* Receiver parameters. */
-	uint32_t bandwidth = config->bitrate + config->bitrate / 2;
-	uint32_t f_coeff_inv = 4; /* FILTERIDX = 0b11 (default) */
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_DECIMATION, 0x0B));
+	CHECK_RET(ax5x43_write_u24(dev, AX5X43_REG_RXDATARATE, 0x003D8D));
+	CHECK_RET(ax5x43_write_u16(dev, AX5X43_REG_IFFREQ, 0x3C8));
 
-	// TODO: rounding
-	uint32_t decimation =
-	        config->clock_freq /
-	        ((1UL << 4) * (uint32_t)config->xtaldiv * f_coeff_inv * bandwidth);
-	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_DECIMATION, decimation));
-
-	// TODO: rounding
-	uint32_t rxdatarate = ((1UL << 7) / config->xtaldiv) *
-	                      config->clock_freq /
-	                      (config->bitrate * decimation);
-	CHECK_RET(ax5x43_write_u24(dev, AX5X43_REG_RXDATARATE, rxdatarate));
-
-	uint32_t f_if = bandwidth / 2;
-	// TODO: Rounding
-	uint16_t iffreq = div20(f_if * config->xtaldiv, config->clock_freq);
-	CHECK_RET(ax5x43_write_u16(dev, AX5X43_REG_IFFREQ, iffreq));
-
-	// FIXME: hardcoded for now
-	uint32_t maxrfoffset = BIT(23) | 628;
-	CHECK_RET(ax5x43_write_u24(dev, AX5X43_REG_MAXRFOFFSET, maxrfoffset));
+	CHECK_RET(ax5x43_write_u24(dev, AX5X43_REG_MAXRFOFFSET, 0x800285));
 	CHECK_RET(ax5x43_write_u24(dev, AX5X43_REG_MAXDROFFSET, 0));
 
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_RXPARAMSETS, 0xF4));
+
 	uint16_t rx = AX5X43_RX_PARAM_SET0;
-	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_AGCGAIN, 0x96));
-	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_AGCTARGET, 0x89));
-	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_TIMEGAIN, 0xC8));
-	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_DRGAIN, 0xC4));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_AGCGAIN, 0xB4));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_AGCTARGET, 0x84));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_TIMEGAIN, 0xF8));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_DRGAIN, 0xF2));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_PHASEGAIN, 0xC3));
+	CHECK_RET(ax5x43_write_u32(dev, rx + AX5X43_RX_FREQGAIN, 0x0F1F0707));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_AMPLGAIN, 0x06));
 	CHECK_RET(ax5x43_write_u16(dev, rx + AX5X43_RX_FREQDEV, 0));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_BBOFFSRES, 0x00));
+
+	rx = AX5X43_RX_PARAM_SET1;
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_AGCGAIN, 0xB4));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_AGCTARGET, 0x84));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_AGCAHYST, 0x00));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_AGCMINMAX, 0x00));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_TIMEGAIN, 0xF6));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_DRGAIN, 0xF1));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_PHASEGAIN, 0xC3));
+	CHECK_RET(ax5x43_write_u32(dev, rx + AX5X43_RX_FREQGAIN, 0x0F1F0707));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_AMPLGAIN, 0x06));
+	CHECK_RET(ax5x43_write_u16(dev, rx + AX5X43_RX_FREQDEV, 0x0032));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_FOURFSK, 0x16));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_BBOFFSRES, 0x00));
+
+	rx = AX5X43_RX_PARAM_SET3;
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_AGCGAIN, 0xFF));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_AGCTARGET, 0x84));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_AGCAHYST, 0x00));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_AGCMINMAX, 0x00));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_TIMEGAIN, 0xF5));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_DRGAIN, 0xF0));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_PHASEGAIN, 0xC3));
+	CHECK_RET(ax5x43_write_u32(dev, rx + AX5X43_RX_FREQGAIN, 0x0F1F0B0B));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_AMPLGAIN, 0x06));
+	CHECK_RET(ax5x43_write_u16(dev, rx + AX5X43_RX_FREQDEV, 0x0032));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_FOURFSK, 0x16));
+	CHECK_RET(ax5x43_write_u8(dev, rx + AX5X43_RX_BBOFFSRES, 0x00));
+
+	CHECK_RET(ax5x43_write_u32(dev, AX5X43_REG_MATCH0PAT, 0xAACCAACC));
+	CHECK_RET(ax5x43_write_u16(dev, AX5X43_REG_MATCH1PAT, 0xAAAA));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_MATCH1LEN, 0x0A));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_MATCH1MAX, 0x0A));
+
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_TMGTXBOOST, 0x3E));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_TMGTXSETTLE, 0x31));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_TMGRXBOOST, 0x3E));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_TMGRXSETTLE, 0x31));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_TMGRXOFFSACQ, 0x00));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_TMGRXCOARSEAGC, 0x7F));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_TMGRXRSSI, 0x03));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_TMGRXPREAMBLE2, 0x17));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_RSSIABSTHR, 0xE3));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_BGNDRSSITHR, 0));
 
 	/* Encoding and framing */
 	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_ENCODING,
@@ -462,8 +487,8 @@ static int init_common_regs(const struct device *dev)
 	// TODO enable multichunk packets
 	// CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PKTACCEPTFLAGS,
         //                           AX5X43_ACCPT_CRCF));
-	// CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PKTSTOREFLAGS,
-	//                           AX5X43_ST_RSSI));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PKTSTOREFLAGS,
+	                          AX5X43_ST_RSSI | AX5X43_ST_FOFFS | AX5X43_ST_RFOFFS));
 
 	// TODO make chunk size configurable
 	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PKTCHUNKSIZE, 0xD));

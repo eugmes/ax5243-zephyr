@@ -173,10 +173,7 @@
 #define AX5X43_RX_TIMEGAIN         0x004 /* Timing Gain */
 #define AX5X43_RX_DRGAIN           0x005 /* Data Rate Gain */
 #define AX5X43_RX_PHASEGAIN        0x006 /* Filter Index, Phase Gain */
-#define AX5X43_RX_FREQGAINA        0x007 /* Frequency Gain A */
-#define AX5X43_RX_FREQGAINB        0x008 /* Frequency Gain B */
-#define AX5X43_RX_FREQGAINC        0x009 /* Frequency Gain C */
-#define AX5X43_RX_FREQGAIND        0x00A /* Frequency Gain D */
+#define AX5X43_RX_FREQGAIN         0x007 /* Frequency Gain */
 #define AX5X43_RX_AMPLGAIN         0x00B /* Aplitude Gain */
 #define AX5X43_RX_FREQDEV          0x00C /* Receiver Frequency Deviation */
 #define AX5X43_RX_FOURFSK          0x00E /* Four FSK Control */
