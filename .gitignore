@@ -4,3 +4,5 @@ bootloader
 modules
 tools
 zephyr
+
+.vscode
