@@ -141,7 +141,6 @@ int main(void)
 		return 2;
 	}
 
-
 	while (1) {
 		uint8_t buf[256];
 
@@ -169,8 +168,6 @@ int main(void)
 				printk("CHUNK %02"PRIX8", size = %d\n", buf[0], ret);
 			}
 		}
-
-		k_sleep(K_MSEC(1));
 	}
 #else
 	int ret = ax5x43_start_tx(dev);

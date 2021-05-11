@@ -27,6 +27,21 @@ LOG_MODULE_REGISTER(ax5x43, CONFIG_AX5X43_LOG_LEVEL);
 		}                   \
 	})
 
+static void ax5x43_gpio_callback_handler(const struct device *port,
+                                         struct gpio_callback *cb,
+                                         gpio_port_pins_t pins)
+{
+	ARG_UNUSED(port);
+	ARG_UNUSED(pins);
+
+	struct ax5x43_drv_data *drv_data =
+	        CONTAINER_OF(cb, struct ax5x43_drv_data, irq_callback);
+	const struct ax5x43_config *config = drv_data->dev->config;
+
+	gpio_pin_interrupt_configure_dt(&config->irq, GPIO_INT_DISABLE);
+	k_sem_give(&drv_data->irq_sem);
+}
+
 static int ax5x43_read_regs(const struct device *dev, bool force_long,
                             uint16_t addr, size_t count, uint8_t *data)
 {
@@ -178,7 +193,19 @@ static int set_pwrmode(const struct device *dev, uint8_t mode)
 
 int ax5x43_start_rx(const struct device *dev)
 {
-	return set_pwrmode(dev, AX5X43_PWRMODE_FULLRX);
+	const struct ax5x43_config *config = dev->config;
+	int ret;
+
+	/* Configure FIFO interrupt. */
+	CHECK_RET(ax5x43_write_u16(dev, AX5X43_REG_IRQMASK,
+	                           AX5X43_IRQ_FIFONOTEMPTY));
+
+	CHECK_RET(set_pwrmode(dev, AX5X43_PWRMODE_FULLRX));
+
+	CHECK_RET(gpio_pin_interrupt_configure_dt(&config->irq,
+	                                          GPIO_INT_EDGE_TO_ACTIVE));
+
+	return 0;
 }
 
 int ax5x43_start_tx(const struct device *dev)
@@ -186,14 +213,38 @@ int ax5x43_start_tx(const struct device *dev)
 	return set_pwrmode(dev, AX5X43_PWRMODE_FULLTX);
 }
 
+/*
+ * STM32 does not support level interrupts, so emulate them here.
+ *
+ * TODO: Find an MCU without this nonsence.
+ */
+void ax5x43_wait_for_interrupt(const struct device *dev)
+{
+	const struct ax5x43_config *config = dev->config;
+	struct ax5x43_drv_data *drv_data = dev->data;
+
+	/* Read the pin status first. */
+	if (gpio_pin_get(config->irq.port, config->irq.pin)) {
+		gpio_pin_interrupt_configure_dt(&config->irq, GPIO_INT_DISABLE);
+		k_sem_take(&drv_data->irq_sem, K_NO_WAIT);
+		return;
+	}
+
+	k_sem_take(&drv_data->irq_sem, K_FOREVER);
+}
+
 int ax5x43_read_fifo(const struct device *dev, uint8_t *buf)
 {
+	const struct ax5x43_config *config = dev->config;
 	int ret;
 	uint16_t fifocount;
 
+	ax5x43_wait_for_interrupt(dev);
+
 	CHECK_RET(ax5x43_read_u16(dev, AX5X43_REG_FIFOCOUNT, &fifocount));
 	if (fifocount == 0) {
-		return 0;
+		ret = 0;
+		goto done;
 	}
 
 	uint8_t *p = buf;
@@ -221,7 +272,10 @@ int ax5x43_read_fifo(const struct device *dev, uint8_t *buf)
 	                           p));
 	p += data_size;
 
-	return p - buf;
+	ret = p - buf;
+done:
+	gpio_pin_interrupt_configure_dt(&config->irq, GPIO_INT_EDGE_TO_ACTIVE);
+	return ret;
 }
 
 int ax5x43_send_packet(const struct device *dev, const uint8_t *buf,
@@ -515,6 +569,17 @@ static int ax5x43_init(const struct device *dev)
 		LOG_ERR("Failed to configure IRQ GPIO");
 		return ret;
 	}
+
+	gpio_init_callback(&drv_data->irq_callback,
+	                   ax5x43_gpio_callback_handler, BIT(config->irq.pin));
+
+	ret = gpio_add_callback(config->irq.port, &drv_data->irq_callback);
+	if (ret < 0) {
+		LOG_ERR("Failed to set GPIO callback");
+		return ret;
+	}
+
+	k_sem_init(&drv_data->irq_sem, 0, 1);
 
 	ret = ax5x43_reset(dev);
 	if (ret < 0) {

@@ -38,6 +38,8 @@ struct ax5x43_config {
 struct ax5x43_drv_data {
 	/* Backling to ease handling of GPIO interrupts. */
 	const struct device *dev;
+	struct gpio_callback irq_callback;
+	struct k_sem irq_sem;
 };
 
 int ax5x43_start_rx(const struct device *dev);
