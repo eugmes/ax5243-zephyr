@@ -53,6 +53,21 @@
 #define AX5X43_DATA_RAW            BIT(4)
 #define AX5X43_DATA_UNENC          BIT(5)
 
+/* Interrupt request indices */
+#define AX5X43_IRQ_FIFONOTEMPTY    BIT(0)
+#define AX5X43_IRQ_FIFONOTFULL     BIT(1)
+#define AX5X43_IRQ_FIFOTHRCNT      BIT(2)
+#define AX5X43_IRQ_FIFOTHRFREE     BIT(3)
+#define AX5X43_IRQ_FIFOERROR       BIT(4)
+#define AX5X43_IRQ_PLLUNLOCK       BIT(5)
+#define AX5X43_IRQ_RADIOCTRL       BIT(6)
+#define AX5X43_IRQ_POWER           BIT(7)
+#define AX5X43_IRQ_XTALREADY       BIT(8)
+#define AX5X43_IRQ_WAKEUPTIMER     BIT(9)
+#define AX5X43_IRQ_LPOSC           BIT(10)
+#define AX5X43_IRQ_GPADC           BIT(11)
+#define AX5X43_IRQ_PLLRNGDONE      BIT(12)
+
 /** Last register that can be accessed using short address. */
 #define AX5X43_LAST_DYN_REG        0x06F
 
