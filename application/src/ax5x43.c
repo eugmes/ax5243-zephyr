@@ -219,12 +219,12 @@ static void ax5x43_wait_for_interrupt(const struct device *dev)
 	const struct ax5x43_config *config = dev->config;
 	struct ax5x43_drv_data *drv_data = dev->data;
 
+	k_sem_reset(&drv_data->irq_sem);
 	gpio_pin_interrupt_configure_dt(&config->irq, GPIO_INT_EDGE_TO_ACTIVE);
 
 	/* Read the pin status first. */
 	if (gpio_pin_get(config->irq.port, config->irq.pin)) {
 		gpio_pin_interrupt_configure_dt(&config->irq, GPIO_INT_DISABLE);
-		k_sem_reset(&drv_data->irq_sem);
 		return;
 	}
 
@@ -387,18 +387,26 @@ static int init_pin_func_regs(const struct device *dev)
 	return 0;
 }
 
-static int wait_for_osc_startup(const struct device *dev)
+static int ax5x43_wait_for_osc_startup(const struct device *dev)
 {
 	int ret;
-	uint8_t reg;
 
-	for (;;) {
-		CHECK_RET(ax5x43_read_u8(dev, AX5X43_REG_XTALSTATUS, &reg));
-		if ((reg & AX5X43_XTALSTATUS_XTALRUN) != 0) {
-			break;
-		}
-		// TODO add delay
-	}
+	CHECK_RET(ax5x43_write_u16(dev, AX5X43_REG_IRQMASK,
+	                           AX5X43_IRQ_XTALREADY));
+	ax5x43_wait_for_interrupt(dev);
+	CHECK_RET(ax5x43_write_u16(dev, AX5X43_REG_IRQMASK, 0));
+
+	return 0;
+}
+
+static int ax5x43_wait_for_ppl_ranging(const struct device *dev)
+{
+	int ret;
+
+	CHECK_RET(ax5x43_write_u16(dev, AX5X43_REG_IRQMASK,
+	                           AX5X43_IRQ_PLLRNGDONE));
+	ax5x43_wait_for_interrupt(dev);
+	CHECK_RET(ax5x43_write_u16(dev, AX5X43_REG_IRQMASK, 0));
 
 	return 0;
 }
@@ -432,17 +440,12 @@ static int init_common_regs(const struct device *dev)
 
 	/* Perform VCO autoraning. */
 	CHECK_RET(set_pwrmode(dev, AX5X43_PWRMODE_STANDBY));
-	wait_for_osc_startup(dev);
+	ax5x43_wait_for_osc_startup(dev);
 	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PLLRANGINGA,
 	                          AX5X43_PLLRANGING_RNGSTART | 8));
 
-	for (;;) {
-		CHECK_RET(ax5x43_read_u8(dev, AX5X43_REG_PLLRANGINGA, &reg));
-		if ((reg & AX5X43_PLLRANGING_RNGSTART) == 0) {
-			break;
-		}
-		// TODO add some delay
-	}
+	ax5x43_wait_for_ppl_ranging(dev);
+	CHECK_RET(ax5x43_read_u8(dev, AX5X43_REG_PLLRANGINGA, &reg));
 
 	CHECK_RET(set_pwrmode(dev, AX5X43_PWRMODE_POWERDOWN));
 
