@@ -193,7 +193,6 @@ static int set_pwrmode(const struct device *dev, uint8_t mode)
 
 int ax5x43_start_rx(const struct device *dev)
 {
-	const struct ax5x43_config *config = dev->config;
 	int ret;
 
 	/* Configure FIFO interrupt. */
@@ -201,9 +200,6 @@ int ax5x43_start_rx(const struct device *dev)
 	                           AX5X43_IRQ_FIFONOTEMPTY));
 
 	CHECK_RET(set_pwrmode(dev, AX5X43_PWRMODE_FULLRX));
-
-	CHECK_RET(gpio_pin_interrupt_configure_dt(&config->irq,
-	                                          GPIO_INT_EDGE_TO_ACTIVE));
 
 	return 0;
 }
@@ -218,15 +214,17 @@ int ax5x43_start_tx(const struct device *dev)
  *
  * TODO: Find an MCU without this nonsence.
  */
-void ax5x43_wait_for_interrupt(const struct device *dev)
+static void ax5x43_wait_for_interrupt(const struct device *dev)
 {
 	const struct ax5x43_config *config = dev->config;
 	struct ax5x43_drv_data *drv_data = dev->data;
 
+	gpio_pin_interrupt_configure_dt(&config->irq, GPIO_INT_EDGE_TO_ACTIVE);
+
 	/* Read the pin status first. */
 	if (gpio_pin_get(config->irq.port, config->irq.pin)) {
 		gpio_pin_interrupt_configure_dt(&config->irq, GPIO_INT_DISABLE);
-		k_sem_take(&drv_data->irq_sem, K_NO_WAIT);
+		k_sem_reset(&drv_data->irq_sem);
 		return;
 	}
 
@@ -235,7 +233,6 @@ void ax5x43_wait_for_interrupt(const struct device *dev)
 
 int ax5x43_read_fifo(const struct device *dev, uint8_t *buf)
 {
-	const struct ax5x43_config *config = dev->config;
 	int ret;
 	uint16_t fifocount;
 
@@ -243,8 +240,7 @@ int ax5x43_read_fifo(const struct device *dev, uint8_t *buf)
 
 	CHECK_RET(ax5x43_read_u16(dev, AX5X43_REG_FIFOCOUNT, &fifocount));
 	if (fifocount == 0) {
-		ret = 0;
-		goto done;
+		return 0;
 	}
 
 	uint8_t *p = buf;
@@ -272,10 +268,7 @@ int ax5x43_read_fifo(const struct device *dev, uint8_t *buf)
 	                           p));
 	p += data_size;
 
-	ret = p - buf;
-done:
-	gpio_pin_interrupt_configure_dt(&config->irq, GPIO_INT_EDGE_TO_ACTIVE);
-	return ret;
+	return p - buf;
 }
 
 int ax5x43_send_packet(const struct device *dev, const uint8_t *buf,
