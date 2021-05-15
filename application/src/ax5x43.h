@@ -42,10 +42,15 @@ struct ax5x43_drv_data {
 	struct k_sem irq_sem;
 };
 
+/* Maximum message size in bytes, this includes CRC.
+ * This should be enough for any AIS message. */
+#define AX5X43_MAX_MSG_SIZE 160
+
 int ax5x43_start_rx(const struct device *dev);
 int ax5x43_start_tx(const struct device *dev);
 int ax5x43_read_fifo(const struct device *dev, uint8_t *buf);
-int ax5x43_send_packet(const struct device *dev, const uint8_t *buf, size_t size);
+int ax5x43_send_packet(const struct device *dev, const uint8_t *buf,
+                       size_t size);
 
 #ifdef __cplusplus
 }

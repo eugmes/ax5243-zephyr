@@ -535,16 +535,16 @@ static int init_common_regs(const struct device *dev)
 	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_FRAMING,
 	                          AX5X43_FRMMODE_HDLC | AX5X43_CRCMODE_CCITT));
 	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PKTLENCFG, 0xF0));
-	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PKTMAXLEN, 0xFF));
-	// TODO enable multichunk packets
-	// CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PKTACCEPTFLAGS,
-	//                           AX5X43_ACCPT_CRCF));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PKTMAXLEN, AX5X43_MAX_MSG_SIZE));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PKTACCEPTFLAGS,
+	                          AX5X43_ACCPT_RESIDUE | AX5X43_ACCPT_LRGP));
 	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PKTSTOREFLAGS,
-	                          AX5X43_ST_RSSI | AX5X43_ST_FOFFS |
+	                          AX5X43_ST_TIMER | AX5X43_ST_RSSI |
 	                                  AX5X43_ST_RFOFFS));
 
 	// TODO make chunk size configurable
-	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PKTCHUNKSIZE, 0xD));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PKTCHUNKSIZE,
+	                          AX5X43_PKTCHUNKSIZE_64));
 
 	// FIXME: a better way to test the transmitter
 	// CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PINFUNCDATA, 4));
