@@ -1,5 +1,12 @@
 menu "Application settings"
 
+config AX5X43_NET_BUF_COUNT
+	int "Number of network buffers for AX5X43"
+	default 2
+	help
+	  Number of network buffers for use with AX5X43.
+	  These buffers are shared between all the devices.
+
 config AX5X43_INIT_PRIORITY
 	int "AX5X43 init priority"
 	default 75

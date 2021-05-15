@@ -45,8 +45,8 @@ static char get_ascii6(const uint8_t *buf, uint16_t bit_offset)
 	if (bit_idx <= 2) {
 		n = (buf[byte_idx] >> (2 - bit_idx)) & 0x3f;
 	} else {
-		n = ((buf[byte_idx] << (bit_idx - 2)) & 0x3f)
-		  | (buf[byte_idx + 1] >> (10 - bit_idx));
+		n = ((buf[byte_idx] << (bit_idx - 2)) & 0x3f) |
+		    (buf[byte_idx + 1] >> (10 - bit_idx));
 	}
 
 	__ASSERT_NO_MSG(n < 64);
@@ -54,16 +54,42 @@ static char get_ascii6(const uint8_t *buf, uint16_t bit_offset)
 	return (n >= 40) ? n + 56 : n + 48;
 }
 
-static void format_aivdm(const uint8_t *buf, size_t len)
+static void format_metadata(const struct ax5x43_user_data *data)
+{
+	char *p = nmea_buffer;
+	*p++ = '\\';
+	p += sprintf(p, "r:%" PRIu64 ",", data->timestamp);
+	p += sprintf(p, "S:%" PRId8 ",", data->rssi);
+	p += sprintf(p, "F:%" PRId32 ",", data->rf_freq_offs);
+	p += sprintf(p, "T:%" PRIu32, data->timer);
+
+	/* Calculate the checksum. */
+	uint8_t sum = 0;
+
+	for (const char *q = nmea_buffer + 1; q < p; q++) {
+		sum ^= *q;
+	}
+
+	/* Add the checksum and the line end. */
+	p += sprintf(p, "*%02X\\", sum);
+
+	// TODO ensure that this is also true for the longest string.
+	__ASSERT(PART_OF_ARRAY(nmea_buffer, p), "nmea_buffer overlow");
+
+	// tty_write(&tty, nmea_buffer, p - nmea_buffer);
+	printk("%s", nmea_buffer);
+}
+
+static void format_aivdm(uint8_t channel_id, const uint8_t *buf, size_t len)
 {
 	uint16_t num_chars = ceiling_fraction(len * 8, 6);
 
 	bool multipart = num_chars > MAX_SENTENCE_CHARS + 1;
-	uint8_t num_parts = multipart ?
-		ceiling_fraction(num_chars, MAX_SENTENCE_CHARS) : 1;
+	uint8_t num_parts =
+	        multipart ? ceiling_fraction(num_chars, MAX_SENTENCE_CHARS) : 1;
 	//LOG_DBG("len: %zu, chars: %u, parts: %u", len, num_chars, num_parts);
 
-	char channel = 'A';
+	char channel = 'A' + channel_id;
 	uint16_t bit_offset = 0;
 	uint16_t remaining_chars = num_chars;
 
@@ -73,7 +99,7 @@ static void format_aivdm(const uint8_t *buf, size_t len)
 		/* Put header. */
 		if (multipart) {
 			p += sprintf(p, "!AIVDM,%u,%u,%u,%c,", num_parts, part,
-				     multipart_counter, channel);
+			             multipart_counter, channel);
 		} else {
 			p += sprintf(p, "!AIVDM,1,1,,%c,", channel);
 		}
@@ -127,6 +153,14 @@ static void format_aivdm(const uint8_t *buf, size_t len)
 	}
 }
 
+K_FIFO_DEFINE(rx_fifo);
+
+static void recv_cb(const struct device *dev, struct net_buf *buf)
+{
+	ARG_UNUSED(dev);
+	net_buf_put(&rx_fifo, buf);
+}
+
 int main(void)
 {
 	const struct device *dev = get_ax5x43_device();
@@ -135,6 +169,8 @@ int main(void)
 	}
 
 #if 1
+	ax5x43_set_callback(dev, recv_cb);
+
 	int ret = ax5x43_start_rx(dev);
 	if (ret < 0) {
 		printk("Failed to start RX mode: %d\n", ret);
@@ -142,32 +178,11 @@ int main(void)
 	}
 
 	while (1) {
-		uint8_t buf[256];
-
-		ret = ax5x43_read_fifo(dev, buf);
-		if (ret < 0) {
-			printk("FIFO readout failed: %d\n", ret);
-			return 3;
-		}
-
-		if (ret > 0) {
-			if ((buf[0] == AX5X43_CHUNK_DATA) && (ret > 5)) {
-				// NOTE: CRC is always present in HDLC mode
-				format_aivdm(buf + 3, ret - 3 - 2);
-			} else if (buf[0] == AX5X43_CHUNK_RSSI) {
-				printk("RSSI: %"PRId8"\n", (int8_t)buf[1]);
-			} else if (buf[0] == AX5X43_CHUNK_FREQOFFS) {
-				int16_t value = (int16_t)sys_get_be16(buf + 1);
-				printk("FREQOFFS: %"PRId16"\n", value);
-			} else if (buf[0] == AX5X43_CHUNK_RFFREQOFFS) {
-				int32_t value = (int32_t)sys_get_be24(buf + 1);
-				value <<= 12;
-				value >>= 12;
-				printk("RFFREQOFFS: %"PRId32"\n", value);
-			} else {
-				printk("CHUNK %02"PRIX8", size = %d\n", buf[0], ret);
-			}
-		}
+		struct net_buf *buf = net_buf_get(&rx_fifo, K_FOREVER);
+		const struct ax5x43_user_data *meta = net_buf_user_data(buf);
+		format_metadata(meta);
+		format_aivdm(meta->channel_id, buf->data, buf->len);
+		net_buf_unref(buf);
 	}
 #else
 	int ret = ax5x43_start_tx(dev);
@@ -179,7 +194,7 @@ int main(void)
 	k_sleep(K_MSEC(1000));
 
 	while (1) {
-		const uint8_t data[] = {0, 1, 2, 3, 4};
+		const uint8_t data[] = { 0, 1, 2, 3, 4 };
 
 		ret = ax5x43_send_packet(dev, data, sizeof(data));
 		if (ret < 0) {

@@ -17,6 +17,11 @@ properties:
       type: phandle-array
       required: true
 
+    channel-id:
+      type: int
+      required: true
+      description: Channel ID.
+
     clock-frequency:
       type: int
       required: true

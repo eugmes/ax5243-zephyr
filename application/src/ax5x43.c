@@ -19,6 +19,9 @@
 
 LOG_MODULE_REGISTER(ax5x43, CONFIG_AX5X43_LOG_LEVEL);
 
+NET_BUF_POOL_DEFINE(ax5x43_pool, CONFIG_AX5X43_NET_BUF_COUNT,
+                    AX5X43_MAX_MSG_SIZE, sizeof(struct ax5x43_user_data), NULL);
+
 #define CHECK_RET(call)             \
 	({                          \
 		ret = (call);       \
@@ -27,19 +30,40 @@ LOG_MODULE_REGISTER(ax5x43, CONFIG_AX5X43_LOG_LEVEL);
 		}                   \
 	})
 
-static void ax5x43_gpio_callback_handler(const struct device *port,
-                                         struct gpio_callback *cb,
-                                         gpio_port_pins_t pins)
+void ax5x43_set_callback(const struct device *dev, ax5x43_recv_callback cb)
+{
+	struct ax5x43_drv_data *drv_data = dev->data;
+	drv_data->recv_cb = cb;
+}
+
+static void ax5x43_gpio_callback_handler_sem(const struct device *port,
+                                             struct gpio_callback *cb,
+                                             gpio_port_pins_t pins)
 {
 	ARG_UNUSED(port);
 	ARG_UNUSED(pins);
 
 	struct ax5x43_drv_data *drv_data =
-	        CONTAINER_OF(cb, struct ax5x43_drv_data, irq_callback);
+	        CONTAINER_OF(cb, struct ax5x43_drv_data, irq_callback_sem);
 	const struct ax5x43_config *config = drv_data->dev->config;
 
 	gpio_pin_interrupt_configure_dt(&config->irq, GPIO_INT_DISABLE);
 	k_sem_give(&drv_data->irq_sem);
+}
+
+static void ax5x43_gpio_callback_handler_wq(const struct device *port,
+                                            struct gpio_callback *cb,
+                                            gpio_port_pins_t pins)
+{
+	ARG_UNUSED(port);
+	ARG_UNUSED(pins);
+
+	struct ax5x43_drv_data *drv_data =
+	        CONTAINER_OF(cb, struct ax5x43_drv_data, irq_callback_wq);
+	const struct ax5x43_config *config = drv_data->dev->config;
+
+	gpio_pin_interrupt_configure_dt(&config->irq, GPIO_INT_DISABLE);
+	k_work_submit(&drv_data->work);
 }
 
 static int ax5x43_read_regs(const struct device *dev, bool force_long,
@@ -94,14 +118,36 @@ static int ax5x43_read_u8(const struct device *dev, uint16_t addr,
 	return ret;
 }
 
-static int ax5x43_read_u16(const struct device *dev, uint16_t addr,
-                           uint16_t *data)
+// static int ax5x43_read_u16(const struct device *dev, uint16_t addr,
+//                            uint16_t *data)
+// {
+// 	uint8_t buf[2];
+// 	int ret = ax5x43_read_regs(dev, false, addr, 2, buf);
+// 	*data = sys_get_be16(buf);
+// 	LOG_DBG("RD %03" PRIX16 " = %04" PRIX16, addr, *data);
+// 	return ret;
+// }
+
+static int ax5x43_read_u24(const struct device *dev, uint16_t addr,
+                           uint32_t *data)
 {
-	uint8_t buf[2];
-	int ret = ax5x43_read_regs(dev, false, addr, 2, buf);
-	*data = sys_get_be16(buf);
-	LOG_DBG("RD %03" PRIX16 " = %02" PRIX16, addr, *data);
+	uint8_t buf[3];
+	int ret = ax5x43_read_regs(dev, false, addr, 3, buf);
+	*data = sys_get_be24(buf);
+	LOG_DBG("RD %03" PRIX32 " = %06" PRIX16, addr, *data);
 	return ret;
+}
+
+static int ax5x43_read_i24(const struct device *dev, uint16_t addr,
+                           int32_t *data)
+{
+	int32_t val;
+	int ret;
+	CHECK_RET(ax5x43_read_u24(dev, addr, &val));
+	val <<= 8;
+	val >>= 8;
+	*data = val;
+	return 0;
 }
 
 static int ax5x43_write_regs(const struct device *dev, bool force_long,
@@ -191,8 +237,25 @@ static int set_pwrmode(const struct device *dev, uint8_t mode)
 	return ax5x43_write_u8(dev, AX5X43_REG_PWRMODE, mode);
 }
 
+static int ax5x43_enable_rx_interrupt(const struct device *dev)
+{
+	const struct ax5x43_config *config = dev->config;
+	struct ax5x43_drv_data *drv_data = dev->data;
+
+	gpio_pin_interrupt_configure_dt(&config->irq, GPIO_INT_EDGE_TO_ACTIVE);
+
+	/* Submit the work manually if the interrupt line is already active. */
+	if (gpio_pin_get(config->irq.port, config->irq.pin)) {
+		return k_work_submit(&drv_data->work);
+	}
+
+	return 0;
+}
+
 int ax5x43_start_rx(const struct device *dev)
 {
+	struct ax5x43_drv_data *drv_data = dev->data;
+	const struct ax5x43_config *config = dev->config;
 	int ret;
 
 	/* Configure FIFO interrupt. */
@@ -200,6 +263,10 @@ int ax5x43_start_rx(const struct device *dev)
 	                           AX5X43_IRQ_FIFONOTEMPTY));
 
 	CHECK_RET(set_pwrmode(dev, AX5X43_PWRMODE_FULLRX));
+
+	CHECK_RET(gpio_add_callback(config->irq.port,
+	                            &drv_data->irq_callback_wq));
+	ax5x43_enable_rx_interrupt(dev);
 
 	return 0;
 }
@@ -231,44 +298,198 @@ static void ax5x43_wait_for_interrupt(const struct device *dev)
 	k_sem_take(&drv_data->irq_sem, K_FOREVER);
 }
 
-int ax5x43_read_fifo(const struct device *dev, uint8_t *buf)
+static int ax5x43_read_fifo(const struct device *dev, size_t size, uint8_t *buf)
 {
+	return ax5x43_read_regs(dev, false, AX5X43_REG_FIFODATA, size, buf);
+}
+
+static int ax5x43_read_fifo_u8(const struct device *dev, uint8_t *data)
+{
+	return ax5x43_read_u8(dev, AX5X43_REG_FIFODATA, data);
+}
+
+static int ax5x43_read_fifo_u24(const struct device *dev, uint32_t *data)
+{
+	return ax5x43_read_u24(dev, AX5X43_REG_FIFODATA, data);
+}
+
+static int ax5x43_read_fifo_i24(const struct device *dev, int32_t *data)
+{
+	return ax5x43_read_i24(dev, AX5X43_REG_FIFODATA, data);
+}
+
+/**
+ * Process a single FIFO chunk.
+ *
+ * This function assumes that the FIFO is not empty.
+ */
+static int ax5x43_process_fifo(const struct device *dev)
+{
+	struct ax5x43_drv_data *drv_data = dev->data;
 	int ret;
-	uint16_t fifocount;
 
-	ax5x43_wait_for_interrupt(dev);
-
-	CHECK_RET(ax5x43_read_u16(dev, AX5X43_REG_FIFOCOUNT, &fifocount));
-	if (fifocount == 0) {
-		return 0;
-	}
-
-	uint8_t *p = buf;
 	uint8_t chunk_type;
-	uint8_t data_size;
-	CHECK_RET(ax5x43_read_u8(dev, AX5X43_REG_FIFODATA, &chunk_type));
-	*p++ = chunk_type;
+	CHECK_RET(ax5x43_read_fifo_u8(dev, &chunk_type));
 
+	uint8_t data_size;
 	uint8_t payload_size_enc = chunk_type >> 5;
 	if (payload_size_enc <= 3) {
 		data_size = payload_size_enc;
 	} else if (payload_size_enc == 7) {
 		/* Read the size of the following data. */
-		CHECK_RET(ax5x43_read_u8(dev, AX5X43_REG_FIFODATA, &data_size));
-		*p++ = data_size;
+		CHECK_RET(ax5x43_read_fifo_u8(dev, &data_size));
 	} else {
 		LOG_ERR("Unknown size encoding: %02" PRIX8, chunk_type);
 		/* TODO: restart the device. */
 		k_panic();
 	}
 
-	// TODO: check data size
-	/* Read the rest of the data. */
-	CHECK_RET(ax5x43_read_regs(dev, false, AX5X43_REG_FIFODATA, data_size,
-	                           p));
-	p += data_size;
+	/* Try to allocate a buffer if it is not already allocated. */
+	if (drv_data->buf == 0) {
+		drv_data->buf = net_buf_alloc(&ax5x43_pool, K_NO_WAIT);
+		if (drv_data->buf == NULL) {
+			LOG_ERR("Failed to allocate a buffer");
+			goto drain_fifo;
+		}
+	}
 
-	return p - buf;
+	struct ax5x43_user_data *user_data = net_buf_user_data(drv_data->buf);
+
+	if (chunk_type == AX5X43_CHUNK_TIMER) {
+		drv_data->rx_state = AX5X43_RX_STATE_INITIAL;
+	}
+
+	switch (drv_data->rx_state) {
+	case AX5X43_RX_STATE_INITIAL:
+		if (chunk_type == AX5X43_CHUNK_TIMER) {
+			net_buf_reset(drv_data->buf);
+			memset(user_data, 0, sizeof(*user_data));
+			user_data->timestamp = k_uptime_get();
+
+			uint32_t timer;
+			CHECK_RET(ax5x43_read_fifo_u24(dev, &timer));
+			user_data->timer = timer;
+
+			drv_data->rx_state = AX5X43_RX_STATE_TIMER;
+		} else {
+			goto drain_fifo;
+		}
+		break;
+	case AX5X43_RX_STATE_TIMER:
+		if (chunk_type == AX5X43_CHUNK_DATA) {
+			uint8_t chunk_flags;
+			CHECK_RET(ax5x43_read_fifo_u8(dev, &chunk_flags));
+
+			if ((chunk_flags & AX5X43_DATA_PKTSTART) == 0) {
+				LOG_ERR("Bad flags: 0x%0" PRIx8
+				        ", length: %" PRIu8,
+				        chunk_flags, data_size);
+				goto drain_fifo;
+			}
+
+			uint8_t *p = net_buf_add(drv_data->buf, data_size - 1);
+			CHECK_RET(ax5x43_read_fifo(dev, data_size - 1, p));
+
+			if ((chunk_flags & AX5X43_DATA_PKTEND) != 0) {
+				drv_data->rx_state = AX5X43_RX_STATE_DATA_END;
+			} else {
+				drv_data->rx_state = AX5X43_RX_STATE_DATA;
+			}
+		} else {
+			goto drain_fifo;
+		}
+		break;
+	case AX5X43_RX_STATE_DATA:
+		if (chunk_type == AX5X43_CHUNK_DATA) {
+			uint8_t chunk_flags;
+			CHECK_RET(ax5x43_read_fifo_u8(dev, &chunk_flags));
+
+			if ((chunk_flags & AX5X43_DATA_PKTSTART) != 0) {
+				goto drain_fifo;
+			}
+
+			uint8_t *p = net_buf_add(drv_data->buf, data_size - 1);
+			CHECK_RET(ax5x43_read_fifo(dev, data_size - 1, p));
+
+			if ((chunk_flags & AX5X43_DATA_PKTEND) != 0) {
+				drv_data->rx_state = AX5X43_RX_STATE_DATA_END;
+			}
+		} else {
+			goto drain_fifo;
+		}
+		break;
+	case AX5X43_RX_STATE_DATA_END:
+		if (chunk_type == AX5X43_CHUNK_RSSI) {
+			int8_t rssi;
+			CHECK_RET(ax5x43_read_fifo_u8(dev, &rssi));
+			user_data->rssi = rssi;
+			drv_data->rx_state = AX5X43_RX_STATE_RSSI;
+		} else {
+			goto drain_fifo;
+		}
+		break;
+	case AX5X43_RX_STATE_RSSI:
+		if (chunk_type == AX5X43_CHUNK_RFFREQOFFS) {
+			int32_t rf_freq_offs;
+			CHECK_RET(ax5x43_read_fifo_i24(dev, &rf_freq_offs));
+			user_data->rf_freq_offs = rf_freq_offs;
+
+			if (drv_data->recv_cb != NULL) {
+				const struct ax5x43_config *config = dev->config;
+				user_data->channel_id = config->channel_id;
+
+				struct net_buf *buf = drv_data->buf;
+				// Discard CRC
+				net_buf_remove_mem(buf, 2);
+
+				drv_data->buf = NULL;
+				drv_data->recv_cb(dev, buf);
+			}
+
+			drv_data->rx_state = AX5X43_RX_STATE_INITIAL;
+		} else {
+			goto drain_fifo;
+		}
+		break;
+	}
+
+	return 0;
+
+drain_fifo:
+	// TODO
+	LOG_ERR("Unexpected chunk type 0x%02" PRIx8 ", state: %d", chunk_type,
+	        drv_data->rx_state);
+	k_panic();
+	return 0;
+}
+
+static void ax5x43_recv_work_handler(struct k_work *work)
+{
+	struct ax5x43_drv_data *data =
+	        CONTAINER_OF(work, struct ax5x43_drv_data, work);
+	const struct device *dev = data->dev;
+
+	for (;;) {
+		uint8_t fifo_stat;
+
+		int ret = ax5x43_read_u8(dev, AX5X43_REG_FIFOSTAT, &fifo_stat);
+		if (ret < 0) {
+			LOG_ERR("Failed to read FIFOSTAT: %d", ret);
+			k_panic();
+		}
+
+		if ((fifo_stat & AX5X43_FIFOSTAT_EMPTY) != 0) {
+			break;
+		}
+
+		ret = ax5x43_process_fifo(dev);
+		if (ret < 0) {
+			LOG_ERR("Failed to process FIFO: %d", ret);
+			k_panic();
+		}
+	}
+
+	ax5x43_enable_rx_interrupt(dev);
 }
 
 int ax5x43_send_packet(const struct device *dev, const uint8_t *buf,
@@ -535,9 +756,11 @@ static int init_common_regs(const struct device *dev)
 	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_FRAMING,
 	                          AX5X43_FRMMODE_HDLC | AX5X43_CRCMODE_CCITT));
 	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PKTLENCFG, 0xF0));
-	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PKTMAXLEN, AX5X43_MAX_MSG_SIZE));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PKTMAXLEN,
+	                          AX5X43_MAX_MSG_SIZE));
+	// TODO: accept residue too
 	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PKTACCEPTFLAGS,
-	                          AX5X43_ACCPT_RESIDUE | AX5X43_ACCPT_LRGP));
+	                          AX5X43_ACCPT_LRGP));
 	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_PKTSTOREFLAGS,
 	                          AX5X43_ST_TIMER | AX5X43_ST_RSSI |
 	                                  AX5X43_ST_RFOFFS));
@@ -560,16 +783,22 @@ static int ax5x43_init(const struct device *dev)
 
 	drv_data->dev = dev;
 
+	k_work_init(&drv_data->work, ax5x43_recv_work_handler);
+
 	ret = gpio_pin_configure_dt(&config->irq, GPIO_INPUT);
 	if (ret < 0) {
 		LOG_ERR("Failed to configure IRQ GPIO");
 		return ret;
 	}
 
-	gpio_init_callback(&drv_data->irq_callback,
-	                   ax5x43_gpio_callback_handler, BIT(config->irq.pin));
+	gpio_init_callback(&drv_data->irq_callback_sem,
+	                   ax5x43_gpio_callback_handler_sem,
+	                   BIT(config->irq.pin));
+	gpio_init_callback(&drv_data->irq_callback_wq,
+	                   ax5x43_gpio_callback_handler_wq,
+	                   BIT(config->irq.pin));
 
-	ret = gpio_add_callback(config->irq.port, &drv_data->irq_callback);
+	ret = gpio_add_callback(config->irq.port, &drv_data->irq_callback_sem);
 	if (ret < 0) {
 		LOG_ERR("Failed to set GPIO callback");
 		return ret;
@@ -601,6 +830,8 @@ static int ax5x43_init(const struct device *dev)
 		return ret;
 	}
 
+	gpio_remove_callback(config->irq.port, &drv_data->irq_callback_sem);
+
 	LOG_DBG("Initialization successful");
 
 	return 0;
@@ -619,6 +850,7 @@ static int ax5x43_init(const struct device *dev)
 		.carrier_freq = DT_INST_PROP(inst, carrier_frequency),        \
 		.clock_source = DT_ENUM_IDX(DT_DRV_INST(inst), clock_source), \
 		.bitrate = DT_INST_PROP(inst, bitrate),                       \
+		.channel_id = DT_INST_PROP(inst, channel_id),                 \
 	};                                                                    \
 	DEVICE_DT_INST_DEFINE(inst, ax5x43_init, NULL,                        \
 	                      &ax5x43_##inst##_drvdata,                       \
