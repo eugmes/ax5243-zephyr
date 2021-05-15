@@ -676,11 +676,13 @@ static int init_common_regs(const struct device *dev)
 	}
 
 	/* Transmitter parameters. */
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_MODCFGF, 0x03));
 	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_MODULATION, 0x08));
 	uint32_t txrate = div24(config->bitrate, config->clock_freq);
 	CHECK_RET(ax5x43_write_u24(dev, AX5X43_REG_TXRATE, txrate));
 	uint32_t fskdev = div24(config->bitrate / 4, config->clock_freq);
 	CHECK_RET(ax5x43_write_u24(dev, AX5X43_REG_FSKDEV, fskdev));
+	CHECK_RET(ax5x43_write_u8(dev, AX5X43_REG_MODCFGA, 0x05));
 
 	// Lower the TX power for testing.
 	CHECK_RET(ax5x43_write_u16(dev, AX5X43_REG_TXPWRCOEFFB, 0x0));
