@@ -6,7 +6,6 @@
 #include <sys/byteorder.h>
 
 #include "ax5x43.h"
-#include "ax5x43_regs.h"
 
 static const struct device *get_ax5x43_device(void)
 {
