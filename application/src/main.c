@@ -161,14 +161,8 @@ static void recv_cb(const struct device *dev, struct net_buf *buf)
 	net_buf_put(&rx_fifo, buf);
 }
 
-int main(void)
+static int main_rx(const struct device *dev)
 {
-	const struct device *dev = get_ax5x43_device();
-	if (dev == NULL) {
-		return 1;
-	}
-
-#if 1
 	ax5x43_set_callback(dev, recv_cb);
 
 	int ret = ax5x43_start_rx(dev);
@@ -184,7 +178,10 @@ int main(void)
 		format_aivdm(meta->channel_id, buf->data, buf->len);
 		net_buf_unref(buf);
 	}
-#else
+}
+
+static int main_tx(const struct device *dev)
+{
 	int ret = ax5x43_start_tx(dev);
 	if (ret < 0) {
 		printk("Failed to start TX mode: %d\n", ret);
@@ -193,8 +190,15 @@ int main(void)
 
 	k_sleep(K_MSEC(1000));
 
+	uint8_t seq_no = 0;
+
 	while (1) {
-		const uint8_t data[] = { 0, 1, 2, 3, 4 };
+		// Single Slot Binary Message
+		uint8_t data[] = { 25 << 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+
+		uint16_t timestamp = k_uptime_get();
+		data[13] = seq_no++;
+		sys_put_be64(timestamp, data + 5);
 
 		ret = ax5x43_send_packet(dev, data, sizeof(data));
 		if (ret < 0) {
@@ -206,5 +210,18 @@ int main(void)
 
 		k_sleep(K_MSEC(1000));
 	}
+}
+
+int main(void)
+{
+	const struct device *dev = get_ax5x43_device();
+	if (dev == NULL) {
+		return 1;
+	}
+
+#if 1
+	return main_rx(dev);
+#else
+	return main_tx(dev);
 #endif
 }
