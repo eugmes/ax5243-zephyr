@@ -1,0 +1,28 @@
+&spi4 {
+	status = "okay";
+	pinctrl-0 = <&spi4_sck_pe2 &spi4_miso_pe5 &spi4_mosi_pe6>;
+	cs-gpios = <&gpioe 4 GPIO_ACTIVE_LOW>;
+
+	ax5243: ax5243@0 {
+		reg = <0>;
+		irq-gpios = <&gpioe 3 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
+	};
+};
+
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		/*
+		 * Reserve 32 KiB for file system partition
+		 */
+		storage_partition: partition@108000 {
+			label = "storage";
+			reg = <0x108000 0x8000>;
+		};
+	};
+};
+
+#include "ax5243_nano_common.dtsi"
