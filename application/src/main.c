@@ -4,6 +4,9 @@
 #include <string.h>
 #include <stdio.h>
 #include <sys/byteorder.h>
+#include <settings/settings.h>
+#include <shell/shell.h>
+#include <stdlib.h>
 
 #include "ax5x43.h"
 
@@ -193,7 +196,9 @@ static int main_tx(const struct device *dev)
 
 	while (1) {
 		// Single Slot Binary Message
-		uint8_t data[] = { 25 << 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+		uint8_t data[] = {
+			25 << 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		};
 
 		uint16_t timestamp = k_uptime_get();
 		data[13] = seq_no++;
@@ -211,16 +216,72 @@ static int main_tx(const struct device *dev)
 	}
 }
 
+#define MODE_RX 1
+#define MODE_TX 0x10fb87d9
+
+static uint32_t op_mode;
+
+static int ais_settings_set(const char *name, size_t len,
+                            settings_read_cb read_cb, void *cb_arg)
+{
+	const char *next;
+	int rc;
+
+	if (settings_name_steq(name, "mode", &next) && !next) {
+		if (len != sizeof(op_mode)) {
+			return -EINVAL;
+		}
+
+		rc = read_cb(cb_arg, &op_mode, sizeof(op_mode));
+		if (rc >= 0) {
+			return 0;
+		}
+
+		return rc;
+	}
+
+	return -ENOENT;
+}
+
+static struct settings_handler ais_conf = {
+	.name = "ais",
+	.h_set = ais_settings_set,
+};
+
+static int cmd_mode(const struct shell *shell, size_t argc, char **argv)
+{
+	if (argc < 2) {
+		shell_print(shell, "Current mode: %lu", op_mode);
+		return 1;
+	}
+
+	uint32_t new_mode = strtoul(argv[1], NULL, 0);
+	shell_print(shell, "Setting mode to: %lu", new_mode);
+	int ret = settings_save_one("ais/mode", &new_mode, sizeof(new_mode));
+	if (ret < 0) {
+		shell_error(shell, "Error: %d", ret);
+	}
+	return 0;
+}
+
+SHELL_CMD_ARG_REGISTER(mode, NULL, "Set AIS operating mode", cmd_mode, 1, 1);
+
 int main(void)
 {
+	settings_subsys_init();
+	settings_register(&ais_conf);
+	settings_load();
+
 	const struct device *dev = get_ax5x43_device();
 	if (dev == NULL) {
 		return 1;
 	}
 
-#if 1
-	return main_rx(dev);
-#else
-	return main_tx(dev);
-#endif
+	if (op_mode == MODE_RX) {
+		return main_rx(dev);
+	} else if (op_mode == MODE_TX) {
+		return main_tx(dev);
+	}
+
+	return 0;
 }
